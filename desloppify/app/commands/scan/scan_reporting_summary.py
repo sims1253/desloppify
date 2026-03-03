@@ -10,7 +10,7 @@ from desloppify.app.commands.status_parts.strict_target import (
     format_strict_target_progress,
 )
 from desloppify.app.commands.helpers.score_update import print_strict_target_nudge
-from desloppify.app.commands.scan.scan_reporting_llm import _is_agent_environment
+from desloppify.app.commands.scan.scan_reporting_llm import is_agent_environment
 from desloppify.core.output_api import colorize
 from desloppify.engine.concerns import generate_concerns
 
@@ -161,7 +161,7 @@ def show_score_delta(
 
     # Score legend — shown on first scan or when strict gap is significant
     scan_count = state.get("scan_count", 0)
-    if scan_count <= 1 or gap > 10 or _is_agent_environment():
+    if scan_count <= 1 or gap > 10 or is_agent_environment():
         print(colorize("  Score guide:", "dim"))
         print(colorize("    overall  = 40% mechanical + 60% subjective (lenient — ignores wontfix)", "dim"))
         print(colorize("    objective = mechanical detectors only (no subjective review)", "dim"))

@@ -24,7 +24,7 @@ __all__ = [
 ]
 
 _registry: dict[str, LangConfig] = {}  # type: ignore[type-arg]  # runtime uses Any
-_load_attempted = False
+_flags: dict[str, bool] = {"load_attempted": False}
 _load_errors: dict[str, BaseException] = {}
 
 
@@ -63,21 +63,19 @@ def remove(name: str) -> None:
 
 def clear() -> None:
     """Full reset: registrations, load-attempted flag, and load errors."""
-    global _load_attempted
     _registry.clear()
-    _load_attempted = False
+    _flags["load_attempted"] = False
     _load_errors.clear()
 
 
 def set_load_attempted(value: bool) -> None:
     """Set the load-attempted flag."""
-    global _load_attempted
-    _load_attempted = value
+    _flags["load_attempted"] = value
 
 
 def was_load_attempted() -> bool:
     """Check whether plugin loading has been attempted."""
-    return _load_attempted
+    return _flags["load_attempted"]
 
 
 def record_load_error(name: str, error: BaseException) -> None:
@@ -87,8 +85,8 @@ def record_load_error(name: str, error: BaseException) -> None:
 
 def set_load_errors(errors: dict[str, BaseException]) -> None:
     """Replace the full load-errors dict (used by discovery)."""
-    global _load_errors
-    _load_errors = dict(errors)
+    _load_errors.clear()
+    _load_errors.update(errors)
 
 
 def get_load_errors() -> dict[str, BaseException]:

@@ -517,7 +517,7 @@ class TestDetectorNames:
         )
 
         test_detector = "_test_cli_cache_refresh"
-        cli_mod._DETECTOR_NAMES = ["stale_only"]
+        cli_mod._DETECTOR_NAMES_CACHE["names"] = ["stale_only"]
         register_detector(
             DetectorMeta(
                 name=test_detector,
@@ -527,7 +527,7 @@ class TestDetectorNames:
                 guidance="cache refresh regression test",
             )
         )
-        assert cli_mod._DETECTOR_NAMES is None
+        assert "names" not in cli_mod._DETECTOR_NAMES_CACHE
         assert test_detector in _get_detector_names()
 
         # Cleanup dynamic detector mutation for test isolation.

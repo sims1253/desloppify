@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import lru_cache
 from typing import Any
 
 CommandHandler = Callable[[Any], None]
-
-_COMMAND_HANDLERS: dict[str, CommandHandler] | None = None
 
 
 def _build_handlers() -> dict[str, CommandHandler]:
@@ -52,12 +51,10 @@ def _build_handlers() -> dict[str, CommandHandler]:
     }
 
 
+@lru_cache(maxsize=1)
 def get_command_handlers() -> dict[str, CommandHandler]:
     """Return cached command handler dict, building on first access."""
-    global _COMMAND_HANDLERS
-    if _COMMAND_HANDLERS is None:
-        _COMMAND_HANDLERS = _build_handlers()
-    return _COMMAND_HANDLERS
+    return _build_handlers()
 
 
 __all__ = ["CommandHandler", "get_command_handlers"]

@@ -127,7 +127,7 @@ class TestCmdScanExecution:
         )
         monkeypatch.setattr(
             scan_cmd_mod,
-            "_print_llm_summary",
+            "print_llm_summary",
             lambda *_args, **_kwargs: captured.update(llm_summary_called=True),
         )
 
@@ -205,7 +205,7 @@ class TestCmdScanExecution:
         )
         monkeypatch.setattr(scan_cmd_mod, "write_query", lambda *_args, **_kwargs: None)
         monkeypatch.setattr(scan_cmd_mod, "emit_scorecard_badge", lambda *_args, **_kwargs: None)
-        monkeypatch.setattr(scan_cmd_mod, "_print_llm_summary", lambda *_args, **_kwargs: None)
+        monkeypatch.setattr(scan_cmd_mod, "print_llm_summary", lambda *_args, **_kwargs: None)
 
         cmd_scan(args)
 

@@ -26,7 +26,7 @@ from desloppify.engine.work_queue import ATTEST_EXAMPLE
 logger = logging.getLogger(__name__)
 
 
-def _is_agent_environment() -> bool:
+def is_agent_environment() -> bool:
     return bool(
         os.environ.get("CLAUDE_CODE")
         or os.environ.get("DESLOPPIFY_AGENT")
@@ -278,7 +278,7 @@ def print_llm_summary(
     clear instructions on how to present the results to the end user.
     Only shown when running inside an agent (CLAUDE_CODE or DESLOPPIFY_AGENT env).
     """
-    if not _is_agent_environment():
+    if not is_agent_environment():
         return
 
     dim_scores = state.get("dimension_scores", {})
@@ -398,7 +398,7 @@ def auto_update_skill() -> None:
 
     Called unconditionally from the scan workflow — not gated on scores.
     """
-    if not _is_agent_environment():
+    if not is_agent_environment():
         return
 
     _try_auto_update_skill()
@@ -419,4 +419,4 @@ def auto_update_skill() -> None:
         )
 
 
-__all__ = ["print_llm_summary", "_print_llm_summary", "auto_update_skill"]
+__all__ = ["is_agent_environment", "print_llm_summary", "_print_llm_summary", "auto_update_skill"]

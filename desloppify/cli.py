@@ -21,7 +21,7 @@ from desloppify.core.runtime_state import runtime_scope
 from desloppify.languages import available_langs
 from desloppify.state import load_state
 
-_DETECTOR_NAMES: list[str] | None = None
+_DETECTOR_NAMES_CACHE: dict[str, list[str]] = {}
 logger = logging.getLogger(__name__)
 # Backward-compatible test patch hook; runtime path resolution uses get_project_root().
 PROJECT_ROOT = get_project_root()
@@ -30,16 +30,14 @@ _PROJECT_ROOT_SENTINEL = PROJECT_ROOT
 
 def _get_detector_names() -> list[str]:
     """Return cached detector names, computing on first access."""
-    global _DETECTOR_NAMES
-    if _DETECTOR_NAMES is None:
-        _DETECTOR_NAMES = detector_names()
-    return _DETECTOR_NAMES
+    if "names" not in _DETECTOR_NAMES_CACHE:
+        _DETECTOR_NAMES_CACHE["names"] = detector_names()
+    return _DETECTOR_NAMES_CACHE["names"]
 
 
 def _invalidate_detector_names_cache() -> None:
     """Invalidate detector-name cache when runtime registrations change."""
-    global _DETECTOR_NAMES
-    _DETECTOR_NAMES = None
+    _DETECTOR_NAMES_CACHE.pop("names", None)
 
 
 on_detector_registered(_invalidate_detector_names_cache)

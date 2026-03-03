@@ -533,7 +533,7 @@ def _build_systemic_patterns(
 ) -> list[dict]:
     """Smell subtypes appearing in 5+ files."""
     results: list[dict] = []
-    for smell_id, count in smell_counter.most_common():
+    for smell_id, _count in smell_counter.most_common():
         unique_files = sorted(set(smell_files.get(smell_id, [])))
         if len(unique_files) < 5:
             continue

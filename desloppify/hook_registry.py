@@ -8,7 +8,7 @@ import sys
 from collections import defaultdict
 
 _LANG_HOOKS: dict[str, dict[str, object]] = defaultdict(dict)
-_LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def register_lang_hooks(
@@ -39,7 +39,7 @@ def get_lang_hook(lang_name: str | None, hook_name: str) -> object | None:
         try:
             importlib.import_module(module_name)
         except (ImportError, ValueError, TypeError, RuntimeError, OSError) as exc:
-            _LOGGER.debug(
+            logger.debug(
                 "Unable to import language hook package %s: %s", lang_name, exc
             )
             return None
@@ -47,7 +47,7 @@ def get_lang_hook(lang_name: str | None, hook_name: str) -> object | None:
         try:
             importlib.reload(module)
         except (ImportError, ValueError, TypeError, RuntimeError, OSError) as exc:
-            _LOGGER.debug(
+            logger.debug(
                 "Unable to reload language hook package %s: %s", lang_name, exc
             )
             return None

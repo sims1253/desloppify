@@ -8,7 +8,7 @@ from pathlib import Path
 
 from desloppify.core.fallbacks import log_best_effort_failure, warn_best_effort
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 _WARNED_READ_FAILURES: set[tuple[str, str]] = set()
 
 
@@ -31,7 +31,7 @@ def read_coverage_file(
     try:
         return CoverageFileReadResult(ok=True, content=Path(filepath).read_text())
     except (OSError, UnicodeDecodeError) as exc:
-        log_best_effort_failure(LOGGER, f"{context} read {filepath}", exc)
+        log_best_effort_failure(logger, f"{context} read {filepath}", exc)
         dedupe_key = (context, filepath)
         if dedupe_key not in _WARNED_READ_FAILURES:
             _WARNED_READ_FAILURES.add(dedupe_key)

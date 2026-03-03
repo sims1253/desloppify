@@ -83,7 +83,7 @@ def _load_json_object(path: Path, *, label: str) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError) as exc:
-        raise CommandError(f"Error: failed reading {label}: {exc}")
+        raise CommandError(f"Error: failed reading {label}: {exc}") from exc
     if not isinstance(payload, dict):
         raise CommandError(f"Error: {label} must contain a JSON object.")
     return payload

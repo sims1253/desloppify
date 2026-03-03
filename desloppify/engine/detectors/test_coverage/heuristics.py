@@ -8,7 +8,7 @@ from desloppify.hook_registry import get_lang_hook
 
 from .io import read_coverage_file
 
-LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _load_lang_test_coverage_module(lang_name: str):
@@ -43,7 +43,7 @@ def _is_runtime_entrypoint(filepath: str, lang_name: str) -> bool:
         try:
             return bool(hook(filepath, content))
         except (TypeError, ValueError):
-            LOGGER.debug(
+            logger.debug(
                 "runtime_entrypoint hook failed for %s", filepath, exc_info=True
             )
 

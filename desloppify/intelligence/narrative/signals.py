@@ -5,7 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from desloppify.core.text_api import PROJECT_ROOT
-from desloppify.core.config import load_config as _load_config
+from desloppify.core.config import (
+    MAX_TARGET_STRICT_SCORE,
+    MIN_TARGET_STRICT_SCORE,
+    load_config as _load_config,
+)
 from desloppify.intelligence.narrative._constants import STRUCTURAL_MERGE
 from desloppify.intelligence.narrative.types import (
     BadgeStatus,
@@ -31,8 +35,6 @@ _RISK_SEVERITY_ORDER = {
 }
 
 DEFAULT_TARGET_STRICT_SCORE = 95
-MIN_TARGET_STRICT_SCORE = 0
-MAX_TARGET_STRICT_SCORE = 100
 _HIGH_IGNORE_SUPPRESSION_THRESHOLD = 30.0
 _WONTFIX_GAP_THRESHOLD = 1.0
 

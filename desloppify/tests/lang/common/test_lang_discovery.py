@@ -40,8 +40,8 @@ def test_load_all_uses_plugin_file_naming_convention(monkeypatch, tmp_path):
 
     monkeypatch.setattr(importlib, "import_module", fake_import_module)
     monkeypatch.setattr(discovery_mod, "__file__", str(tmp_path / "discovery.py"))
-    monkeypatch.setattr(registry_state, "_load_attempted", False)
-    monkeypatch.setattr(registry_state, "_load_errors", {})
+    registry_state.set_load_attempted(False)
+    registry_state.set_load_errors({})
 
     load_all()
     assert ".plugin_rust" in imported
@@ -78,8 +78,8 @@ def test_load_all_force_reload_resets_runtime_registries_and_reimports(monkeypat
         "reset_registered_scoring_policies",
         lambda: reset_calls.append("scoring"),
     )
-    monkeypatch.setattr(registry_state, "_load_attempted", True)
-    monkeypatch.setattr(registry_state, "_load_errors", {".stale": RuntimeError("old")})
+    registry_state.set_load_attempted(True)
+    registry_state.set_load_errors({".stale": RuntimeError("old")})
 
     load_all(force_reload=True)
 

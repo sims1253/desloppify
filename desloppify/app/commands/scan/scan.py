@@ -32,7 +32,7 @@ from desloppify.app.commands.scan.scan_reporting_dimensions import (
     show_scorecard_subjective_measures,
 )
 from desloppify.app.commands.scan.scan_reporting_llm import (
-    _print_llm_summary,
+    print_llm_summary,
     auto_update_skill,
 )
 from desloppify.app.commands.scan.scan_reporting_summary import (  # noqa: F401
@@ -213,7 +213,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
         badge_path, _badge_result = badge_emit
     else:  # Backward-compatible shape for monkeypatched tests.
         badge_path = badge_emit
-    _print_llm_summary(runtime.state, badge_path, narrative, merge.diff)
+    print_llm_summary(runtime.state, badge_path, narrative, merge.diff)
     auto_update_skill()
 
 

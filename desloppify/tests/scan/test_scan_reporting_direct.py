@@ -97,7 +97,7 @@ def test_show_score_delta_hides_legend_on_subsequent_scans(monkeypatch, capsys):
     monkeypatch.setattr(state_mod, "get_strict_score", lambda _state: 93.0)
     monkeypatch.setattr(state_mod, "get_verified_strict_score", lambda _state: 92.0)
     # Ensure not in agent environment so the non-agent path hides the legend
-    monkeypatch.setattr(scan_reporting_summary_mod, "_is_agent_environment", lambda: False)
+    monkeypatch.setattr(scan_reporting_summary_mod, "is_agent_environment", lambda: False)
 
     scan_reporting_summary_mod.show_score_delta(
         state={"stats": {"open": 1, "total": 5, "wontfix": 0}, "scan_count": 5},
@@ -118,7 +118,7 @@ def test_show_score_delta_shows_legend_in_agent_environment(monkeypatch, capsys)
     monkeypatch.setattr(state_mod, "get_objective_score", lambda _state: 94.0)
     monkeypatch.setattr(state_mod, "get_strict_score", lambda _state: 93.0)
     monkeypatch.setattr(state_mod, "get_verified_strict_score", lambda _state: 92.0)
-    monkeypatch.setattr(scan_reporting_summary_mod, "_is_agent_environment", lambda: True)
+    monkeypatch.setattr(scan_reporting_summary_mod, "is_agent_environment", lambda: True)
 
     scan_reporting_summary_mod.show_score_delta(
         state={"stats": {"open": 1, "total": 5, "wontfix": 0}, "scan_count": 5},
@@ -442,7 +442,7 @@ def test_print_llm_summary_respects_env_and_includes_dimension_table(
         "stats": {"total": 10, "open": 4, "fixed": 3, "wontfix": 2},
     }
 
-    scan_reporting_llm_mod._print_llm_summary(
+    scan_reporting_llm_mod.print_llm_summary(
         state=state,
         badge_path=badge_path,
         narrative={

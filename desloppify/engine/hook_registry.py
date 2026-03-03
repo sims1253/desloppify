@@ -11,7 +11,7 @@ from desloppify.languages._framework import registry_state
 from desloppify.languages._framework.scoped_store import ScopedDictStore
 
 _HOOK_STORE: ScopedDictStore[str, dict[str, object]] = ScopedDictStore()
-_LOGGER = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _current_runtime_scope() -> str | None:
@@ -76,7 +76,7 @@ def get_lang_hook(lang_name: str | None, hook_name: str, *, scope: str | None = 
             try:
                 importlib.import_module(module_name)
             except (ImportError, ValueError, TypeError, RuntimeError, OSError) as exc:
-                _LOGGER.debug(
+                logger.debug(
                     "Unable to import language hook package %s: %s", lang_name, exc
                 )
                 return None
@@ -84,7 +84,7 @@ def get_lang_hook(lang_name: str | None, hook_name: str, *, scope: str | None = 
             try:
                 importlib.reload(module)
             except (ImportError, ValueError, TypeError, RuntimeError, OSError) as exc:
-                _LOGGER.debug(
+                logger.debug(
                     "Unable to reload language hook package %s: %s", lang_name, exc
                 )
                 return None
