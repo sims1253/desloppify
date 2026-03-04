@@ -25,7 +25,7 @@ from desloppify.app.cli_support.parser_groups import (
     _add_viz_parser,
     _add_zone_parser,
 )
-from desloppify.app.cli_support.parser_groups_plan import add_plan_parser
+from desloppify.app.cli_support.parser_groups_plan_impl import add_plan_parser
 
 USAGE_EXAMPLES = """
 workflow:

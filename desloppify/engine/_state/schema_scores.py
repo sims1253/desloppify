@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from desloppify.engine._state.schema import StateModel
+from typing import Any
 
 
 def json_default(obj: Any) -> Any:
@@ -22,22 +19,22 @@ def json_default(obj: Any) -> Any:
     )
 
 
-def get_overall_score(state: StateModel) -> float | None:
+def get_overall_score(state: dict[str, Any]) -> float | None:
     value = state.get("overall_score")
     return float(value) if isinstance(value, int | float) else None
 
 
-def get_objective_score(state: StateModel) -> float | None:
+def get_objective_score(state: dict[str, Any]) -> float | None:
     value = state.get("objective_score")
     return float(value) if isinstance(value, int | float) else None
 
 
-def get_strict_score(state: StateModel) -> float | None:
+def get_strict_score(state: dict[str, Any]) -> float | None:
     value = state.get("strict_score")
     return float(value) if isinstance(value, int | float) else None
 
 
-def get_verified_strict_score(state: StateModel) -> float | None:
+def get_verified_strict_score(state: dict[str, Any]) -> float | None:
     value = state.get("verified_strict_score")
     return float(value) if isinstance(value, int | float) else None
 

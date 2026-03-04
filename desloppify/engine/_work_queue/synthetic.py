@@ -142,7 +142,7 @@ def build_triage_stage_items(plan: dict, state: dict) -> list[WorkQueueItem]:
         if name == "commit":
             cmd = 'desloppify plan triage --complete --strategy "..."'
 
-        items.append({
+        item: WorkQueueItem = {
             "id": sid,
             "tier": 1,
             "confidence": "high",
@@ -155,10 +155,11 @@ def build_triage_stage_items(plan: dict, state: dict) -> list[WorkQueueItem]:
                 "stage": name,
                 "stage_label": label_map.get(name, name),
             },
-            "primary_command": cmd,
             "blocked_by": blocked_by,
             "is_blocked": bool(blocked_by),
-        })
+        }
+        item["primary_command"] = cmd
+        items.append(item)
     return items
 
 
@@ -235,27 +236,26 @@ def build_subjective_items(
             primary_command = _prepare_command(cli_keys)
         stale_tag = " [stale — re-review]" if is_stale else ""
         summary = f"Subjective dimension below target: {name} ({strict_val:.1f}%){stale_tag}"
-        items.append(
-            {
-                "id": f"subjective::{slugify(dim_key)}",
-                "detector": "subjective_assessment",
-                "file": ".",
-                "confidence": "medium",
-                "summary": summary,
-                "detail": {
-                    "dimension_name": name,
-                    "dimension": dim_key,
-                    "failing": int(entry.get("failing", 0)),
-                    "strict_score": strict_val,
-                    "open_review_issues": open_review,
-                    "cli_keys": cli_keys,
-                },
-                "status": "open",
-                "kind": "subjective_dimension",
-                "primary_command": primary_command,
-                "initial_review": is_unassessed,
-            }
-        )
+        item: WorkQueueItem = {
+            "id": f"subjective::{slugify(dim_key)}",
+            "detector": "subjective_assessment",
+            "file": ".",
+            "confidence": "medium",
+            "summary": summary,
+            "detail": {
+                "dimension_name": name,
+                "dimension": dim_key,
+                "failing": int(entry.get("failing", 0)),
+                "strict_score": strict_val,
+                "open_review_issues": open_review,
+                "cli_keys": cli_keys,
+            },
+            "status": "open",
+            "kind": "subjective_dimension",
+        }
+        item["primary_command"] = primary_command
+        item["initial_review"] = is_unassessed
+        items.append(item)
     return items
 
 
