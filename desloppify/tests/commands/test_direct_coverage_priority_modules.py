@@ -151,3 +151,13 @@ def test_app_plan_modules_avoid_private_engine_plan_imports():
     for rel_path in rel_paths:
         text = (package_root / rel_path).read_text(encoding="utf-8")
         assert "desloppify.engine._plan" not in text
+
+
+def test_next_and_status_init_modules_are_stub_only():
+    package_root = Path(__file__).resolve().parents[2]
+    for rel_path in (
+        "app/commands/next/__init__.py",
+        "app/commands/status/__init__.py",
+    ):
+        text = (package_root / rel_path).read_text(encoding="utf-8")
+        assert "__getattr__" not in text
