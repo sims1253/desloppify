@@ -7,7 +7,7 @@ import sys
 from functools import lru_cache
 import argparse
 from desloppify.app.cli_support.parser import create_parser as _create_parser
-from desloppify.app.commands.helpers.lang import LangResolutionError, resolve_lang
+from desloppify.app.commands.helpers.lang import resolve_lang
 from desloppify.app.commands.helpers.runtime import CommandRuntime
 from desloppify.app.commands.helpers.state import state_path
 from desloppify.app.commands.registry import get_command_handlers
@@ -177,9 +177,6 @@ def main() -> None:
     except CommandError as exc:
         print(colorize(f"  {exc.message}", "red"), file=sys.stderr)
         sys.exit(exc.exit_code)
-    except LangResolutionError as exc:
-        print(colorize(f"  {exc.message}", "red"), file=sys.stderr)
-        sys.exit(1)
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)

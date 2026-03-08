@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from desloppify import languages as lang_api
 from desloppify.base.discovery.paths import get_project_root
+from desloppify.base.exception_sets import CommandError
 
 if TYPE_CHECKING:
     from desloppify.languages._framework.base.types import LangConfig
@@ -18,18 +19,17 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class LangResolutionError(SystemExit):
+class LangResolutionError(CommandError):
     """Raised when language resolution fails with a user-facing message.
 
-    Inherits from SystemExit so that callers which don't catch it explicitly
-    will still terminate with a non-zero exit code, matching the previous
-    sys.exit(1) behaviour.  The CLI top-level catches it to print a clean
-    error without a traceback.
+    Inherits from ``CommandError`` so the CLI top-level uses the standard
+    command error path (formatted message + non-zero exit code) instead of
+    bypassing the command error hierarchy.
     """
 
     def __init__(self, message: str) -> None:
         self.message = message
-        super().__init__(1)
+        super().__init__(message, exit_code=1)
 
 
 EXTRA_ROOT_MARKERS = (
