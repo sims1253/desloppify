@@ -23,7 +23,7 @@ from desloppify.base.discovery.file_paths import (
 
 )
 
-from desloppify.base.discovery.source import find_ts_files
+from desloppify.base.discovery.source import find_ts_and_tsx_files
 from desloppify.base.output.fallbacks import log_best_effort_failure
 from desloppify.base.search.grep import grep_files
 from desloppify.base.output.terminal import colorize, print_table
@@ -47,7 +47,7 @@ def detect_logs(path: Path) -> tuple[list[dict], int]:
 
 def detect_logs_result(path: Path) -> DetectorResult[dict]:
     """Detect tagged logs with explicit population semantics."""
-    ts_files = find_ts_files(path)
+    ts_files = find_ts_and_tsx_files(path)
     total_files = len(ts_files)
 
     hits1 = grep_files(_PAT1, ts_files)

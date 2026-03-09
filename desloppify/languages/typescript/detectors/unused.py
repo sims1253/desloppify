@@ -16,7 +16,7 @@ from pathlib import Path
 
 from desloppify.base.discovery.file_paths import rel, resolve_path, safe_write_text
 from desloppify.base.discovery.paths import get_project_root
-from desloppify.base.discovery.source import find_ts_files
+from desloppify.base.discovery.source import find_ts_and_tsx_files
 from desloppify.base.output.terminal import colorize, print_table
 from desloppify.languages.typescript.detectors.unused_fallback import (
     _contains_deno_markers,
@@ -41,7 +41,7 @@ _should_use_deno_fallback = should_use_deno_fallback
 
 
 def detect_unused(path: Path, category: str = "all") -> tuple[list[dict], int]:
-    ts_files = find_ts_files(path)
+    ts_files = find_ts_and_tsx_files(path)
     total_files = len(ts_files)
     if _should_use_deno_fallback(path, ts_files):
         return _detect_unused_fallback(path, category)
@@ -153,7 +153,7 @@ def _categorize_unused(filepath: str, lineno: int) -> str:
 
 def cmd_unused(args: argparse.Namespace) -> None:
     path = Path(args.path)
-    if _should_use_deno_fallback(path, find_ts_files(path)):
+    if _should_use_deno_fallback(path, find_ts_and_tsx_files(path)):
         print(
             colorize(
                 "Deno/edge TypeScript context detected — using source-based unused scan",

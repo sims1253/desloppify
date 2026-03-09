@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from desloppify.base.discovery.source import find_ts_files
+from desloppify.base.discovery.source import find_ts_and_tsx_files
 from desloppify.languages._framework.commands_base import (
     make_cmd_complexity,
     make_cmd_facade,
@@ -42,9 +42,9 @@ from desloppify.languages.typescript.phases import (
     TS_SKIP_NAMES,
 )
 
-cmd_large = make_cmd_large(find_ts_files, default_threshold=500, module_name=__name__)
+cmd_large = make_cmd_large(find_ts_and_tsx_files, default_threshold=500, module_name=__name__)
 cmd_complexity = make_cmd_complexity(
-    find_ts_files, TS_COMPLEXITY_SIGNALS, module_name=__name__
+    find_ts_and_tsx_files, TS_COMPLEXITY_SIGNALS, module_name=__name__
 )
 cmd_single_use = make_cmd_single_use(
     deps_detector_mod.build_dep_graph,
@@ -59,7 +59,7 @@ cmd_passthrough = make_cmd_passthrough(
     module_name=__name__,
 )
 cmd_naming = make_cmd_naming(
-    find_ts_files,
+    find_ts_and_tsx_files,
     skip_names=TS_SKIP_NAMES,
     skip_dirs=TS_SKIP_DIRS,
     module_name=__name__,

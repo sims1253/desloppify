@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from desloppify.base.discovery.source import find_ts_files
+from desloppify.base.discovery.source import find_ts_and_tsx_files
 from desloppify.base.discovery.paths import get_area
 from desloppify.engine.hook_registry import register_lang_hooks
 from desloppify.engine.policy.zones import COMMON_ZONE_RULES, Zone, ZoneRule
@@ -108,7 +108,7 @@ class TypeScriptConfig(LangConfig):
                 BoundaryRule("shared/", "tools/", "shared→tools"),
             ],
             typecheck_cmd="npx tsc --noEmit",
-            file_finder=find_ts_files,
+            file_finder=find_ts_and_tsx_files,
             large_threshold=500,
             complexity_threshold=15,
             default_scan_profile="full",

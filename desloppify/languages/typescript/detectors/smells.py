@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 from desloppify.base.discovery.paths import get_project_root
-from desloppify.base.discovery.source import find_ts_files
+from desloppify.base.discovery.source import find_ts_and_tsx_files
 from desloppify.base.output.fallbacks import log_best_effort_failure
 from desloppify.languages.typescript.detectors._smell_detectors_flow import (
     _detect_async_no_await,
@@ -60,7 +60,7 @@ def detect_smells(path: Path) -> tuple[list[dict], int]:
     """Detect TypeScript/React smell patterns across project sources."""
     checks = TS_SMELL_CHECKS
     smell_counts: dict[str, list[dict]] = {s["id"]: [] for s in checks}
-    files = find_ts_files(path)
+    files = find_ts_and_tsx_files(path)
 
     for filepath in files:
         if "node_modules" in filepath or ".d.ts" in filepath:

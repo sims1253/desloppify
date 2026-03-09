@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from desloppify.base.discovery.source import find_ts_files
+from desloppify.base.discovery.source import find_ts_and_tsx_files
 from desloppify.engine.detectors.base import FunctionInfo
 from desloppify.languages._framework.base.types import DetectorPhase
 from desloppify.languages._framework.treesitter.phases import make_cohesion_phase
@@ -28,7 +28,7 @@ def ts_treesitter_phases() -> list[DetectorPhase]:
 def ts_extract_functions(path: Path) -> list[FunctionInfo]:
     """Extract all TS functions for duplicate detection."""
     functions = []
-    for filepath in find_ts_files(path):
+    for filepath in find_ts_and_tsx_files(path):
         if "node_modules" in filepath or ".d.ts" in filepath:
             continue
         functions.extend(extract_ts_functions(filepath))

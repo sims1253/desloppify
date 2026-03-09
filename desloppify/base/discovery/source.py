@@ -190,6 +190,12 @@ def find_source_files(
 
 
 def find_ts_files(path: str | Path) -> list[str]:
+    """Find TypeScript ``.ts`` source files (excluding ``.tsx``)."""
+    return find_source_files(path, [".ts"])
+
+
+def find_ts_and_tsx_files(path: str | Path) -> list[str]:
+    """Find TypeScript source files across ``.ts`` and ``.tsx`` extensions."""
     return find_source_files(path, [".ts", ".tsx"])
 
 
@@ -215,6 +221,7 @@ __all__ = [
     "clear_source_file_cache_for_tests",
     "find_source_files",
     "find_ts_files",
+    "find_ts_and_tsx_files",
     "find_tsx_files",
     "find_py_files",
 ]

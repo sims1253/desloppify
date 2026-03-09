@@ -13,7 +13,7 @@ from desloppify.base.search.grep import grep_files
 from desloppify.base.output.terminal import colorize, print_table
 from desloppify.base.discovery.source import (
     find_source_files,
-    find_ts_files,
+    find_ts_and_tsx_files,
 )
 from desloppify.base.discovery.paths import get_project_root
 from desloppify.engine.detectors.graph import (
@@ -65,7 +65,7 @@ def build_dep_graph(
     tsconfig_root = _find_tsconfig_root(path, project_root)
     tsconfig_paths = _load_tsconfig_paths(tsconfig_root)
 
-    ts_files = find_ts_files(path)
+    ts_files = find_ts_and_tsx_files(path)
     hits = grep_files(r"""(?:\bfrom\s+['"]|\bimport\s+['"])""", ts_files)
 
     for filepath, _lineno, content in hits:
