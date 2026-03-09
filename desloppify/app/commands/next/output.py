@@ -57,16 +57,15 @@ def serialize_item(item: Mapping[str, Any]) -> dict[str, Any]:
             serialized_cluster["action_steps"] = action_steps
         return serialized_cluster
 
-    serialized: dict[str, Any] = {
-        "id": item.get("id"),
-        "kind": item.get("kind", "issue"),
-        "confidence": item.get("confidence"),
-        "detector": item.get("detector"),
-        "file": item.get("file"),
-        "summary": item.get("summary"),
-        "detail": item.get("detail", {}),
-        "status": item.get("status"),
-    }
+    serialized: dict[str, Any] = {}
+    serialized["id"] = item.get("id")
+    serialized["kind"] = item.get("kind", "issue")
+    serialized["confidence"] = item.get("confidence")
+    serialized["detector"] = item.get("detector")
+    serialized["file"] = item.get("file")
+    serialized["summary"] = item.get("summary")
+    serialized["detail"] = item.get("detail", {})
+    serialized["status"] = item.get("status")
     serialized["primary_command"] = item.get("primary_command")
 
     # Workflow dependency state

@@ -11,14 +11,18 @@ TRIAGE_STAGE_LABELS: tuple[tuple[str, str], ...] = (
     ("commit", "Write strategy & confirm"),
 )
 
-TRIAGE_STAGE_DEPENDENCIES: dict[str, set[str]] = {
-    "observe": set(),
-    "reflect": {"observe"},
-    "organize": {"reflect"},
-    "enrich": {"organize"},
-    "sense-check": {"enrich"},
-    "commit": {"sense-check"},
-}
+_TRIAGE_STAGE_DEPENDENCY_ITEMS: tuple[tuple[str, set[str]], ...] = (
+    ("observe", set()),
+    ("reflect", {"observe"}),
+    ("organize", {"reflect"}),
+    ("enrich", {"organize"}),
+    ("sense-check", {"enrich"}),
+    ("commit", {"sense-check"}),
+)
+
+TRIAGE_STAGE_DEPENDENCIES: dict[str, set[str]] = dict(
+    _TRIAGE_STAGE_DEPENDENCY_ITEMS
+)
 
 TRIAGE_CMD_OBSERVE = (
     'desloppify plan triage --stage observe --report '

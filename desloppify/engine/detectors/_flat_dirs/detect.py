@@ -77,15 +77,13 @@ def detect_flat_dirs(
                 combined_score=combined_score,
                 settings=settings,
             ):
-                entries.append(
-                    {
-                        "directory": dir_path,
-                        "file_count": file_count,
-                        "child_dir_count": direct_child_count,
-                        "combined_score": combined_score,
-                        "kind": "overload",
-                    }
-                )
+                overload_entry: dict[str, str | int] = {}
+                overload_entry["directory"] = dir_path
+                overload_entry["file_count"] = file_count
+                overload_entry["child_dir_count"] = direct_child_count
+                overload_entry["combined_score"] = combined_score
+                overload_entry["kind"] = "overload"
+                entries.append(overload_entry)
                 continue
             fragmented = fragmentation_entry(
                 dir_path=dir_path,

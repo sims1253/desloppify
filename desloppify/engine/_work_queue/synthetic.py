@@ -251,8 +251,8 @@ def build_subjective_items(
                 "cli_keys": cli_keys,
             },
             "status": "open",
-            "kind": "subjective_dimension",
         }
+        item["kind"] = "subjective_dimension"
         item["primary_command"] = primary_command
         item["initial_review"] = is_unassessed
         items.append(item)

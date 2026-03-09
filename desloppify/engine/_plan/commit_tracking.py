@@ -60,8 +60,8 @@ def record_commit(
         "issue_ids": ids_to_record,
         "recorded_at": utc_now(),
         "note": note,
-        "cluster_name": cluster_name,
     }
+    record["cluster_name"] = cluster_name
 
     commit_log: list[CommitRecord] = plan.setdefault("commit_log", [])
     commit_log.append(record)
