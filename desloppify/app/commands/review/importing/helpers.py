@@ -465,33 +465,90 @@ def _parse_and_validate_import(
     return issues_data, []
 
 
+def _legacy_bool(value: object, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return bool(value)
+
+
+def _legacy_text(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+@dataclass(frozen=True)
+class LegacyImportLoadArgs:
+    lang_name: str | None
+    allow_partial: bool
+    trusted_assessment_source: bool
+    trusted_assessment_label: str | None
+    attested_external: bool
+    manual_override: bool
+    manual_attest: str | None
+
+
+def _coerce_legacy_import_load_kwargs(
+    legacy_kwargs: dict[str, object],
+) -> LegacyImportLoadArgs:
+    """Validate and normalize legacy keyword args for import load config."""
+    allowed_keys = {
+        "lang_name",
+        "allow_partial",
+        "trusted_assessment_source",
+        "trusted_assessment_label",
+        "attested_external",
+        "manual_override",
+        "manual_attest",
+    }
+    unknown = sorted(set(legacy_kwargs) - allowed_keys)
+    if unknown:
+        joined = ", ".join(unknown)
+        raise TypeError(f"Unexpected keyword argument(s): {joined}")
+    return LegacyImportLoadArgs(
+        lang_name=_legacy_text(legacy_kwargs.get("lang_name")),
+        allow_partial=_legacy_bool(legacy_kwargs.get("allow_partial"), default=False),
+        trusted_assessment_source=_legacy_bool(
+            legacy_kwargs.get("trusted_assessment_source"),
+            default=False,
+        ),
+        trusted_assessment_label=_legacy_text(
+            legacy_kwargs.get("trusted_assessment_label")
+        ),
+        attested_external=_legacy_bool(
+            legacy_kwargs.get("attested_external"),
+            default=False,
+        ),
+        manual_override=_legacy_bool(
+            legacy_kwargs.get("manual_override"),
+            default=False,
+        ),
+        manual_attest=_legacy_text(legacy_kwargs.get("manual_attest")),
+    )
+
+
 def load_import_issues_data(
     import_file: str,
     *,
     config: ImportLoadConfig | None = None,
     colorize_fn=None,
-    lang_name: str | None = None,
-    allow_partial: bool = False,
-    trusted_assessment_source: bool = False,
-    trusted_assessment_label: str | None = None,
-    attested_external: bool = False,
-    manual_override: bool = False,
-    manual_attest: str | None = None,
+    **legacy_kwargs,
 ) -> ReviewImportPayload:
     """Load and normalize review import payload to object format.
 
     Raises ``ImportPayloadLoadError`` when validation fails.
     """
     _ = colorize_fn
+    legacy_values = _coerce_legacy_import_load_kwargs(legacy_kwargs)
     options, conflict_errors = _resolve_import_load_config(
         config=config,
-        lang_name=lang_name,
-        allow_partial=allow_partial,
-        trusted_assessment_source=trusted_assessment_source,
-        trusted_assessment_label=trusted_assessment_label,
-        attested_external=attested_external,
-        manual_override=manual_override,
-        manual_attest=manual_attest,
+        lang_name=legacy_values.lang_name,
+        allow_partial=legacy_values.allow_partial,
+        trusted_assessment_source=legacy_values.trusted_assessment_source,
+        trusted_assessment_label=legacy_values.trusted_assessment_label,
+        attested_external=legacy_values.attested_external,
+        manual_override=legacy_values.manual_override,
+        manual_attest=legacy_values.manual_attest,
     )
     if conflict_errors:
         raise ImportPayloadLoadError(conflict_errors)

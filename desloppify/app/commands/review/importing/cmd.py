@@ -40,6 +40,65 @@ _SCORECARD_SUBJECTIVE_AT_TARGET = bind_scorecard_subjective_at_target(
 )
 
 
+def _optional_bool(value: object, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return bool(value)
+
+
+def _optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
+def _legacy_import_config(
+    *,
+    import_config: ReviewImportConfig | None,
+    legacy_kwargs: dict[str, object],
+) -> ReviewImportConfig:
+    """Resolve config object from modern argument or legacy keyword args."""
+    allowed_keys = {
+        "config",
+        "allow_partial",
+        "trusted_assessment_source",
+        "trusted_assessment_label",
+        "attested_external",
+        "manual_override",
+        "manual_attest",
+    }
+    unknown = sorted(set(legacy_kwargs) - allowed_keys)
+    if unknown:
+        joined = ", ".join(unknown)
+        raise TypeError(f"Unexpected keyword argument(s): {joined}")
+    if import_config is not None and legacy_kwargs:
+        raise TypeError("Pass either import_config=... or legacy keyword args, not both")
+    if import_config is not None:
+        return import_config
+    config_obj = legacy_kwargs.get("config")
+    config_dict = config_obj if isinstance(config_obj, dict) else None
+    return ReviewImportConfig(
+        config=config_dict,
+        allow_partial=_optional_bool(legacy_kwargs.get("allow_partial"), default=False),
+        trusted_assessment_source=_optional_bool(
+            legacy_kwargs.get("trusted_assessment_source"),
+            default=False,
+        ),
+        trusted_assessment_label=_optional_text(
+            legacy_kwargs.get("trusted_assessment_label")
+        ),
+        attested_external=_optional_bool(
+            legacy_kwargs.get("attested_external"),
+            default=False,
+        ),
+        manual_override=_optional_bool(
+            legacy_kwargs.get("manual_override"),
+            default=False,
+        ),
+        manual_attest=_optional_text(legacy_kwargs.get("manual_attest")),
+    )
+
+
 def _resolve_import_payload(
     import_file,
     *,
@@ -177,29 +236,19 @@ def do_import(
     lang,
     state_file,
     *,
-    config: dict | None = None,
-    allow_partial: bool = False,
-    trusted_assessment_source: bool = False,
-    trusted_assessment_label: str | None = None,
-    attested_external: bool = False,
-    manual_override: bool = False,
-    manual_attest: str | None = None,
+    import_config: ReviewImportConfig | None = None,
     dry_run: bool = False,
+    **legacy_kwargs,
 ) -> None:
     """Import mode: ingest agent-produced issues."""
-    import_config = ReviewImportConfig(
-        config=config,
-        allow_partial=allow_partial,
-        trusted_assessment_source=trusted_assessment_source,
-        trusted_assessment_label=trusted_assessment_label,
-        attested_external=attested_external,
-        manual_override=manual_override,
-        manual_attest=manual_attest,
+    resolved_import_config = _legacy_import_config(
+        import_config=import_config,
+        legacy_kwargs=legacy_kwargs,
     )
     issues_data, _override_enabled, override_attest = _resolve_import_payload(
         import_file,
         lang_name=lang.name,
-        import_config=import_config,
+        import_config=resolved_import_config,
     )
 
     assessment_policy: AssessmentImportPolicyModel = (
@@ -225,7 +274,7 @@ def do_import(
         issues_data=issues_data,
         assessment_policy=assessment_policy,
     )
-    _raise_on_partial_skip(diff, allow_partial=import_config.allow_partial)
+    _raise_on_partial_skip(diff, allow_partial=resolved_import_config.allow_partial)
     _append_assessment_import_audit(
         working_state=working_state,
         assessment_policy=assessment_policy,
@@ -247,7 +296,7 @@ def do_import(
     print_import_results(
         state=display_state,
         lang_name=lang.name,
-        config=import_config.config,
+        config=resolved_import_config.config,
         diff=diff,
         prev=prev,
         label=label,
@@ -261,26 +310,22 @@ def do_validate_import(
     import_file,
     lang,
     *,
-    allow_partial: bool = False,
-    attested_external: bool = False,
-    manual_override: bool = False,
-    manual_attest: str | None = None,
+    import_config: ReviewImportConfig | None = None,
+    **legacy_kwargs,
 ) -> None:
     """Validate import payload/policy and print mode without mutating state."""
-    import_config = ReviewImportConfig(
-        allow_partial=allow_partial,
-        attested_external=attested_external,
-        manual_override=manual_override,
-        manual_attest=manual_attest,
+    resolved_import_config = _legacy_import_config(
+        import_config=import_config,
+        legacy_kwargs=legacy_kwargs,
     )
     override_enabled, override_attest = import_helpers_mod.resolve_override_context(
-        manual_override=import_config.manual_override,
-        manual_attest=import_config.manual_attest,
+        manual_override=resolved_import_config.manual_override,
+        manual_attest=resolved_import_config.manual_attest,
     )
     try:
         validate_import_flag_combos(
-            attested_external=import_config.attested_external,
-            allow_partial=import_config.allow_partial,
+            attested_external=resolved_import_config.attested_external,
+            allow_partial=resolved_import_config.allow_partial,
             override_enabled=override_enabled,
             override_attest=override_attest,
         )
@@ -292,7 +337,7 @@ def do_validate_import(
             import_file,
             config=build_import_load_config(
                 lang_name=lang.name,
-                import_config=import_config,
+                import_config=resolved_import_config,
                 override_enabled=override_enabled,
                 override_attest=override_attest,
             ),
