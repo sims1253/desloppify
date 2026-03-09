@@ -149,6 +149,10 @@ def test_build_deferred_disposition_item_with_temporary_skips() -> None:
     assert item["primary_command"] == 'desloppify plan unskip "*"'
     assert item["detail"]["deferred_cluster_count"] == 0
     assert item["detail"]["deferred_individual_count"] == 2
+    tools = item["detail"]["planning_tools"]
+    assert len(tools) == 4
+    assert tools[0]["command"] == "desloppify plan queue --include-skipped"
+    assert "cluster-or-id" in tools[2]["command"]
     assert "decision_options" in item["detail"]
     assert len(item["detail"]["decision_options"]) == 2
 

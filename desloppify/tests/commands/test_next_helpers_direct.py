@@ -99,6 +99,12 @@ def test_workflow_render_action_shows_decision_options(capsys) -> None:
         {
             "summary": "Deferred backlog",
             "detail": {
+                "planning_tools": [
+                    {
+                        "label": "Review deferred backlog",
+                        "command": "desloppify plan queue --include-skipped",
+                    },
+                ],
                 "decision_options": [
                     {"label": "Reactivate", "command": 'desloppify plan unskip "*"'},
                     {"label": "Wontfix", "command": 'desloppify plan skip --permanent "*"'},
@@ -109,6 +115,8 @@ def test_workflow_render_action_shows_decision_options(capsys) -> None:
         colorize_fn=lambda text, _tone=None: text,
     )
     out = capsys.readouterr().out
+    assert "Planning tools" in out
+    assert "plan queue --include-skipped" in out
     assert "Decision options" in out
     assert "Reactivate" in out
     assert "Wontfix" in out

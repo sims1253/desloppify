@@ -256,11 +256,19 @@ def build_deferred_disposition_item(plan: dict) -> WorkQueueItem | None:
     cluster_label = "cluster" if cluster_count == 1 else "clusters"
     individual_label = "item" if individual_count == 1 else "items"
     reactivate_cmd = 'desloppify plan unskip "*"'
+    subset_reactivate_cmd = "desloppify plan unskip <cluster-or-id>"
+    inspect_cmd = "desloppify plan queue --include-skipped"
+    inspect_item_cmd = "desloppify show <cluster-or-id>"
     wontfix_cmd = (
         'desloppify plan skip --permanent "*" '
         '--note "<why this deferred work should stay wontfix>" '
         '--attest "I have actually reviewed these deferred items and I am not gaming the score by skipping them permanently." '
         "--confirm"
+    )
+    subset_wontfix_cmd = (
+        "desloppify plan skip --permanent <cluster-or-id> "
+        '--note "<why this deferred work should stay wontfix>" '
+        '--attest "I have actually reviewed these deferred items and I am not gaming the score by skipping them permanently."'
     )
 
     return {
@@ -281,6 +289,24 @@ def build_deferred_disposition_item(plan: dict) -> WorkQueueItem | None:
             "deferred_individual_count": individual_count,
             "reactivate_command": reactivate_cmd,
             "wontfix_command": wontfix_cmd,
+            "planning_tools": [
+                {
+                    "label": "Review deferred backlog",
+                    "command": inspect_cmd,
+                },
+                {
+                    "label": "Inspect a specific cluster or item",
+                    "command": inspect_item_cmd,
+                },
+                {
+                    "label": "Reactivate a subset",
+                    "command": subset_reactivate_cmd,
+                },
+                {
+                    "label": "Mark a subset as permanent wontfix",
+                    "command": subset_wontfix_cmd,
+                },
+            ],
             "decision_options": [
                 {
                     "label": "Reactivate deferred work",

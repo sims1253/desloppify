@@ -41,6 +41,21 @@ def _render_workflow_action(item: dict, *, colorize_fn) -> None:
     print(colorize_fn("  " + "─" * 60, "dim"))
     print(f"  {colorize_fn(item.get('summary', ''), 'yellow')}")
     detail = item.get("detail", {})
+    planning_tools = detail.get("planning_tools", []) if isinstance(detail, dict) else []
+    if isinstance(planning_tools, list) and planning_tools:
+        print(colorize_fn("\n  Planning tools:", "dim"))
+        for idx, tool in enumerate(planning_tools, 1):
+            if not isinstance(tool, dict):
+                continue
+            label = str(tool.get("label", "")).strip()
+            command = str(tool.get("command", "")).strip()
+            if label and command:
+                print(colorize_fn(f"  {idx}. {label}: {command}", "dim"))
+            elif command:
+                print(colorize_fn(f"  {idx}. {command}", "dim"))
+            elif label:
+                print(colorize_fn(f"  {idx}. {label}", "dim"))
+
     options = detail.get("decision_options", []) if isinstance(detail, dict) else []
     if isinstance(options, list) and options:
         print(colorize_fn("\n  Decision options:", "dim"))
