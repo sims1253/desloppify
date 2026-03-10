@@ -120,16 +120,21 @@ def update_defer_state(
         prior_scan = _coerce_non_negative_int(previous.get("last_deferred_scan"), default=-1)
         if prior_scan != scan_count:
             defer_count += 1
-        updated["defer_count"] = max(1, defer_count)
-        updated["first_deferred_scan"] = _coerce_non_negative_int(
+        branch_updates = {
+            "defer_count": max(1, defer_count),
+            "first_deferred_scan": _coerce_non_negative_int(
             previous.get("first_deferred_scan"),
             default=scan_count,
-        )
-        updated["first_deferred_at"] = str(previous.get("first_deferred_at") or timestamp)
+            ),
+            "first_deferred_at": str(previous.get("first_deferred_at") or timestamp),
+        }
     else:
-        updated["defer_count"] = 1 if current_ids else 0
-        updated["first_deferred_scan"] = scan_count
-        updated["first_deferred_at"] = timestamp
+        branch_updates = {
+            "defer_count": 1 if current_ids else 0,
+            "first_deferred_scan": scan_count,
+            "first_deferred_at": timestamp,
+        }
+    updated.update(branch_updates)
     return updated
 
 
