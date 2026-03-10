@@ -29,49 +29,71 @@ from ..cluster_ops_manage import _cmd_cluster_merge
 from ..cluster_ops_reorder import _cmd_cluster_reorder
 from ..cluster_update import cmd_cluster_update as _cmd_cluster_update_impl
 
-_HEX8_RE = re.compile(r"^[0-9a-f]{8}$")
+
+def _looks_like_hash_suffix(value: str) -> bool:
+    return re.fullmatch(r"[0-9a-f]{8}", value) is not None
+
+
+def _known_issue_ids(state: dict, plan: dict | None) -> list[str]:
+    all_ids: list[str] = list(state.get("issues", {}).keys())
+    if plan is None:
+        return all_ids
+
+    seen_ids: set[str] = set(all_ids)
+    for fid in plan.get("queue_order", []):
+        if fid not in seen_ids:
+            seen_ids.add(fid)
+            all_ids.append(fid)
+    for cluster in plan.get("clusters", {}).values():
+        for fid in cluster.get("issue_ids", []):
+            if fid not in seen_ids:
+                seen_ids.add(fid)
+                all_ids.append(fid)
+    return all_ids
+
+
+def _hash_suffix_suggestions(all_ids: list[str], suffix: str) -> tuple[list[str], str | None]:
+    suggestions = [fid for fid in all_ids if fid.endswith(f"::{suffix}") or fid == suffix]
+    return suggestions, f"match by hash suffix alone: {suffix}"
+
+
+def _segment_suggestions(all_ids: list[str], segments: list[str]) -> tuple[list[str], str | None]:
+    last_seg = segments[-1]
+    slug = segments[-2] if len(segments) >= 2 else ""
+    suggestions: list[str] = []
+    for fid in all_ids:
+        if f"::{last_seg}::" in fid or fid.endswith(f"::{last_seg}"):
+            suggestions.append(fid)
+        elif slug and (f"::{slug}::" in fid or fid.endswith(f"::{slug}")):
+            suggestions.append(fid)
+    return suggestions, None
+
+
+def _pattern_suggestions(all_ids: list[str], pattern: str) -> tuple[list[str], str | None]:
+    segments = pattern.split("::")
+    last_seg = segments[-1]
+    if _looks_like_hash_suffix(last_seg):
+        return _hash_suffix_suggestions(all_ids, last_seg)
+    return _segment_suggestions(all_ids, segments)
+
+
+def _print_suggestions(pattern: str, suggestions: list[str], tip: str | None) -> None:
+    if not suggestions:
+        return
+    print(colorize(f"  No match for: {pattern!r}", "yellow"))
+    print(colorize("  Did you mean:", "dim"))
+    for match in suggestions[:3]:
+        print(colorize(f"    {match}", "dim"))
+    if tip:
+        print(colorize(f"  Tip: {tip}", "dim"))
 
 
 def _suggest_close_matches(state: dict, plan: dict | None, patterns: list[str]) -> None:
     """Print fuzzy match suggestions for patterns that resolved to zero issues."""
-    all_ids: list[str] = list(state.get("issues", {}).keys())
-    if plan is not None:
-        seen_ids: set[str] = set(all_ids)
-        for fid in plan.get("queue_order", []):
-            if fid not in seen_ids:
-                seen_ids.add(fid)
-                all_ids.append(fid)
-        for cluster in plan.get("clusters", {}).values():
-            for fid in cluster.get("issue_ids", []):
-                if fid not in seen_ids:
-                    seen_ids.add(fid)
-                    all_ids.append(fid)
-
+    all_ids = _known_issue_ids(state, plan)
     for pattern in patterns:
-        segments = pattern.split("::")
-        last_seg = segments[-1]
-        tip: str | None = None
-
-        if _HEX8_RE.match(last_seg):
-            suffix = last_seg
-            suggestions = [fid for fid in all_ids if fid.endswith(f"::{suffix}") or fid == suffix]
-            tip = f"match by hash suffix alone: {suffix}"
-        else:
-            slug = segments[-2] if len(segments) >= 2 else ""
-            suggestions = []
-            for fid in all_ids:
-                if f"::{last_seg}::" in fid or fid.endswith(f"::{last_seg}"):
-                    suggestions.append(fid)
-                elif slug and (f"::{slug}::" in fid or fid.endswith(f"::{slug}")):
-                    suggestions.append(fid)
-
-        if suggestions:
-            print(colorize(f"  No match for: {pattern!r}", "yellow"))
-            print(colorize("  Did you mean:", "dim"))
-            for match in suggestions[:3]:
-                print(colorize(f"    {match}", "dim"))
-            if tip:
-                print(colorize(f"  Tip: {tip}", "dim"))
+        suggestions, tip = _pattern_suggestions(all_ids, pattern)
+        _print_suggestions(pattern, suggestions, tip)
 
 
 def _print_pattern_hints() -> None:

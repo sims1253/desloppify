@@ -82,6 +82,44 @@ def _imported_cluster_steps(entry: dict) -> list[dict]:
     return imported_steps
 
 
+def _report_cluster_import_dry_run(entries: list[dict], clusters: dict) -> None:
+    for entry in entries:
+        if not isinstance(entry, dict) or "name" not in entry:
+            print(colorize(f"  Skipping entry without 'name': {entry!r}", "yellow"))
+            continue
+        action = "CREATE" if entry.get("name") not in clusters else "UPDATE"
+        step_count = len(entry.get("steps", []))
+        print(colorize(f"  [{action}] {entry['name']}: {step_count} step(s)", "cyan"))
+    print(colorize("  (dry run — no changes saved)", "dim"))
+
+
+def _load_or_create_import_cluster(
+    plan: dict,
+    clusters: dict,
+    entry: dict,
+) -> tuple[dict | None, bool]:
+    name = entry["name"]
+    if name in clusters:
+        return clusters[name], False
+    try:
+        cluster = create_cluster(plan, name, entry.get("description"))
+    except ValueError as ex:
+        print(colorize(f"  {ex}", "red"))
+        return None, False
+    return cluster, True
+
+
+def _apply_import_entry(cluster: dict, entry: dict) -> None:
+    if "description" in entry:
+        cluster["description"] = entry["description"]
+    if "priority" in entry:
+        cluster["priority"] = entry["priority"]
+    if "steps" in entry:
+        cluster["action_steps"] = _imported_cluster_steps(entry)
+    cluster["user_modified"] = True
+    cluster["updated_at"] = utc_now()
+
+
 def _cmd_cluster_create(args: argparse.Namespace) -> None:
     name: str = getattr(args, "cluster_name", "")
     description: str | None = getattr(args, "description", None)
@@ -185,14 +223,7 @@ def _cmd_cluster_import(args: argparse.Namespace) -> None:
     clusters = plan.get("clusters", {})
 
     if dry_run:
-        for entry in entries:
-            if not isinstance(entry, dict) or "name" not in entry:
-                print(colorize(f"  Skipping entry without 'name': {entry!r}", "yellow"))
-                continue
-            action = "CREATE" if entry.get("name") not in clusters else "UPDATE"
-            step_count = len(entry.get("steps", []))
-            print(colorize(f"  [{action}] {entry['name']}: {step_count} step(s)", "cyan"))
-        print(colorize("  (dry run — no changes saved)", "dim"))
+        _report_cluster_import_dry_run(entries, clusters)
         return
 
     created = 0
@@ -201,28 +232,14 @@ def _cmd_cluster_import(args: argparse.Namespace) -> None:
         if not isinstance(entry, dict) or "name" not in entry:
             print(colorize(f"  Skipping entry without 'name': {entry!r}", "yellow"))
             continue
-        name = entry["name"]
-        is_new = name not in clusters
-
+        cluster, is_new = _load_or_create_import_cluster(plan, clusters, entry)
+        if cluster is None:
+            continue
+        _apply_import_entry(cluster, entry)
         if is_new:
-            try:
-                cluster = create_cluster(plan, name, entry.get("description"))
-            except ValueError as ex:
-                print(colorize(f"  {ex}", "red"))
-                continue
             created += 1
         else:
-            cluster = clusters[name]
             updated += 1
-
-        if "description" in entry:
-            cluster["description"] = entry["description"]
-        if "priority" in entry:
-            cluster["priority"] = entry["priority"]
-        if "steps" in entry:
-            cluster["action_steps"] = _imported_cluster_steps(entry)
-        cluster["user_modified"] = True
-        cluster["updated_at"] = utc_now()
 
     save_plan(plan)
     print(colorize(f"  Import complete: {created} created, {updated} updated.", "green"))

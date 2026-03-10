@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import desloppify.app.commands.plan.cluster.dispatch as cluster_dispatch_mod
 import desloppify.app.commands.plan.cluster_ops_display as cluster_display_mod
 import desloppify.app.commands.plan.cluster_ops_manage as cluster_manage_mod
 import desloppify.app.commands.plan.cluster_ops_reorder as cluster_reorder_mod
@@ -291,6 +292,29 @@ def test_cluster_reorder_item_position_and_whole_cluster_paths(monkeypatch, caps
     )
     out_item = capsys.readouterr().out
     assert "--item requires exactly one cluster name" in out_item
+
+
+def test_cluster_dispatch_suggest_close_matches_supports_hash_and_slug(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(cluster_dispatch_mod, "colorize", lambda text, _tone: text)
+    state = {
+        "issues": {
+            "review::src/a.py::timing_attack::f41b3eb7": {},
+            "review::src/b.py::naming_issue::c1d2e3f4": {},
+        }
+    }
+    plan = {
+        "queue_order": ["review::src/c.py::other_issue::11111111"],
+        "clusters": {"alpha": {"issue_ids": ["review::src/d.py::sluggy::22222222"]}},
+    }
+
+    cluster_dispatch_mod._suggest_close_matches(
+        state,
+        plan,
+        ["f41b3eb7", "review::src/a.py::timing_attack"],
+    )
+    out = capsys.readouterr().out
+    assert "match by hash suffix alone: f41b3eb7" in out
+    assert "review::src/a.py::timing_attack::f41b3eb7" in out
 
 
 def test_cluster_update_direct_paths(capsys) -> None:

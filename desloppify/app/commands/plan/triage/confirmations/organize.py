@@ -48,6 +48,95 @@ def _require_clustered_review_issues(plan: dict, state: dict) -> bool:
     return False
 
 
+def _print_reflect_activity_summary(plan: dict, stages: dict) -> None:
+    reflect_ts = stages.get("reflect", {}).get("timestamp", "")
+    if not reflect_ts:
+        return
+    activity = count_log_activity_since(plan, reflect_ts)
+    if activity:
+        print("  Since reflect, you have:")
+        for action, count in sorted(activity.items()):
+            print(f"    {action}: {count}")
+        return
+    print("  No logged plan operations since reflect.")
+
+
+def _organize_cluster_names(plan: dict) -> list[str]:
+    return [
+        name for name in plan.get("clusters", {}) if not plan["clusters"][name].get("auto")
+    ]
+
+
+def _warn_directory_scatter(plan: dict, *, scatter_fn) -> None:
+    scattered = scatter_fn(plan)
+    if not scattered:
+        return
+    print(colorize(f"\n  Warning: {len(scattered)} cluster(s) span many unrelated directories:", "yellow"))
+    for name, dir_count, sample_dirs in scattered:
+        print(colorize(f"    {name}: {dir_count} directories — likely grouped by theme, not area", "yellow"))
+        for directory in sample_dirs[:3]:
+            print(colorize(f"      {directory}", "dim"))
+    print(colorize("  Consider splitting into area-focused clusters (same files in same PR).", "dim"))
+
+
+def _warn_high_step_ratio(plan: dict, *, ratio_fn) -> None:
+    high_ratio = ratio_fn(plan)
+    if not high_ratio:
+        return
+    print(colorize(f"\n  Warning: {len(high_ratio)} cluster(s) have step count ≥ issue count:", "yellow"))
+    for name, steps, issues, ratio in high_ratio:
+        print(colorize(f"    {name}: {steps} steps for {issues} issues ({ratio:.1f}x)", "yellow"))
+    print(colorize("  Steps should consolidate changes to the same file. 1:1 means each issue is its own step.", "dim"))
+
+
+def _overlap_dependency_gaps(overlaps: list[tuple[str, str, list[str]]], clusters: dict) -> list[tuple[str, str, list[str]]]:
+    needs_dep = []
+    for left, right, files in overlaps:
+        left_deps = set(clusters.get(left, {}).get("depends_on_clusters", []))
+        right_deps = set(clusters.get(right, {}).get("depends_on_clusters", []))
+        if right not in left_deps and left not in right_deps:
+            needs_dep.append((left, right, files))
+    return needs_dep
+
+
+def _warn_overlap_dependencies(plan: dict, *, overlap_fn) -> None:
+    overlaps = overlap_fn(plan)
+    if not overlaps:
+        return
+    clusters_dict = plan.get("clusters", {})
+    print(colorize(f"\n  Note: {len(overlaps)} cluster pair(s) reference the same files:", "yellow"))
+    for left, right, files in overlaps[:5]:
+        print(colorize(f"    {left} ↔ {right}: {len(files)} shared file(s)", "yellow"))
+    needs_dep = _overlap_dependency_gaps(overlaps, clusters_dict)
+    if not needs_dep:
+        return
+    print(colorize("  These pairs have no dependency relationship — add one to prevent merge conflicts:", "dim"))
+    for left, right, _files in needs_dep[:5]:
+        print(colorize(f"    desloppify plan cluster update {right} --depends-on {left}", "dim"))
+        print(colorize(f"    # or: desloppify plan cluster update {left} --depends-on {right}", "dim"))
+
+
+def _warn_self_dependencies(clusters: dict) -> None:
+    for name, cluster in clusters.items():
+        deps = cluster.get("depends_on_clusters", [])
+        if name in deps:
+            print(colorize(f"  Warning: {name} depends on itself.", "yellow"))
+
+
+def _warn_orphaned_clusters(clusters: dict) -> None:
+    orphaned = [
+        (name, len(cluster.get("action_steps", [])))
+        for name, cluster in clusters.items()
+        if not cluster.get("auto") and not cluster.get("issue_ids") and cluster.get("action_steps")
+    ]
+    if not orphaned:
+        return
+    print(colorize(f"\n  Note: {len(orphaned)} cluster(s) have steps but no issues:", "yellow"))
+    for name, step_count in orphaned:
+        print(colorize(f"    {name}: {step_count} steps, 0 issues", "yellow"))
+    print(colorize("  These may need issues added, or may be leftover from resolved work.", "dim"))
+
+
 def confirm_organize(
     args: argparse.Namespace,
     plan: dict,
@@ -66,24 +155,12 @@ def confirm_organize(
 
     print(colorize("  Stage: ORGANIZE — Defer contradictions, cluster, & prioritize", "bold"))
     print(colorize("  " + "─" * 63, "dim"))
-
-    # Reflect activity summary
-    reflect_ts = stages.get("reflect", {}).get("timestamp", "")
-    if reflect_ts:
-        activity = count_log_activity_since(plan, reflect_ts)
-        if activity:
-            print("  Since reflect, you have:")
-            for action, count in sorted(activity.items()):
-                print(f"    {action}: {count}")
-        else:
-            print("  No logged plan operations since reflect.")
+    _print_reflect_activity_summary(plan, stages)
 
     print(colorize("\n  Plan:", "bold"))
     show_plan_summary(plan, state)
 
-    organize_clusters = [
-        name for name in plan.get("clusters", {}) if not plan["clusters"][name].get("auto")
-    ]
+    organize_clusters = _organize_cluster_names(plan)
     if not _require_enriched_clusters(plan):
         return
     if not _require_clustered_review_issues(plan, state):
@@ -96,56 +173,12 @@ def confirm_organize(
         _clusters_with_high_step_ratio,
     )
 
-    scattered = _clusters_with_directory_scatter(plan)
-    if scattered:
-        print(colorize(f"\n  Warning: {len(scattered)} cluster(s) span many unrelated directories:", "yellow"))
-        for name, dir_count, sample_dirs in scattered:
-            print(colorize(f"    {name}: {dir_count} directories — likely grouped by theme, not area", "yellow"))
-            for directory in sample_dirs[:3]:
-                print(colorize(f"      {directory}", "dim"))
-        print(colorize("  Consider splitting into area-focused clusters (same files in same PR).", "dim"))
-
-    high_ratio = _clusters_with_high_step_ratio(plan)
-    if high_ratio:
-        print(colorize(f"\n  Warning: {len(high_ratio)} cluster(s) have step count ≥ issue count:", "yellow"))
-        for name, steps, issues, ratio in high_ratio:
-            print(colorize(f"    {name}: {steps} steps for {issues} issues ({ratio:.1f}x)", "yellow"))
-        print(colorize("  Steps should consolidate changes to the same file. 1:1 means each issue is its own step.", "dim"))
-
-    overlaps = _cluster_file_overlaps(plan)
-    if overlaps:
-        clusters_dict = plan.get("clusters", {})
-        print(colorize(f"\n  Note: {len(overlaps)} cluster pair(s) reference the same files:", "yellow"))
-        for left, right, files in overlaps[:5]:
-            print(colorize(f"    {left} ↔ {right}: {len(files)} shared file(s)", "yellow"))
-        needs_dep = []
-        for left, right, files in overlaps:
-            left_deps = set(clusters_dict.get(left, {}).get("depends_on_clusters", []))
-            right_deps = set(clusters_dict.get(right, {}).get("depends_on_clusters", []))
-            if right not in left_deps and left not in right_deps:
-                needs_dep.append((left, right, files))
-        if needs_dep:
-            print(colorize("  These pairs have no dependency relationship — add one to prevent merge conflicts:", "dim"))
-            for left, right, _files in needs_dep[:5]:
-                print(colorize(f"    desloppify plan cluster update {right} --depends-on {left}", "dim"))
-                print(colorize(f"    # or: desloppify plan cluster update {left} --depends-on {right}", "dim"))
-
+    _warn_directory_scatter(plan, scatter_fn=_clusters_with_directory_scatter)
+    _warn_high_step_ratio(plan, ratio_fn=_clusters_with_high_step_ratio)
+    _warn_overlap_dependencies(plan, overlap_fn=_cluster_file_overlaps)
     all_clusters = plan.get("clusters", {})
-    for name, cluster in all_clusters.items():
-        deps = cluster.get("depends_on_clusters", [])
-        if name in deps:
-            print(colorize(f"  Warning: {name} depends on itself.", "yellow"))
-
-    orphaned = [
-        (name, len(cluster.get("action_steps", [])))
-        for name, cluster in all_clusters.items()
-        if not cluster.get("auto") and not cluster.get("issue_ids") and cluster.get("action_steps")
-    ]
-    if orphaned:
-        print(colorize(f"\n  Note: {len(orphaned)} cluster(s) have steps but no issues:", "yellow"))
-        for name, step_count in orphaned:
-            print(colorize(f"    {name}: {step_count} steps, 0 issues", "yellow"))
-        print(colorize("  These may need issues added, or may be leftover from resolved work.", "dim"))
+    _warn_self_dependencies(all_clusters)
+    _warn_orphaned_clusters(all_clusters)
 
     organized, total, _ = triage_coverage(plan, open_review_ids=open_review_ids_from_state(state))
     if not finalize_stage_confirmation(
