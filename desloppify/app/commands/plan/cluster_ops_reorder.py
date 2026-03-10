@@ -73,6 +73,50 @@ def _resolve_item_position(
     return (position, None, None)
 
 
+def _validate_cluster_members(
+    cluster_names: list[str],
+    clusters: dict,
+) -> str | None:
+    for name in cluster_names:
+        if name not in clusters:
+            print(colorize(f"  Cluster {name!r} does not exist.", "red"))
+            return None
+    return ", ".join(cluster_names)
+
+
+def _resolve_item_reorder_context(
+    args: argparse.Namespace,
+    *,
+    plan: dict,
+    clusters: dict,
+    cluster_name: str,
+    item_pattern: str,
+) -> tuple[dict, set[str], list[str], list[str]] | None:
+    cluster_member_set = set(clusters[cluster_name].get("issue_ids", []))
+    state = command_runtime(args).state
+    item_ids = resolve_ids_from_patterns(state, [item_pattern], plan=plan)
+    if not item_ids:
+        print(colorize("  No matching issues found for --item pattern.", "yellow"))
+        return None
+    for fid in item_ids:
+        if fid not in cluster_member_set:
+            print(colorize(f"  {fid!r} is not a member of cluster {cluster_name!r}.", "red"))
+            return None
+    queue_order: list[str] = plan.get("queue_order", [])
+    ordered_slice = [fid for fid in queue_order if fid in cluster_member_set]
+    return state, cluster_member_set, item_ids, ordered_slice
+
+
+def _resolve_reorder_offset(position: str, target: str | None) -> tuple[str | None, int | None]:
+    if position not in ("up", "down") or target is None:
+        return target, None
+    try:
+        return None, int(target)
+    except (ValueError, TypeError):
+        print(colorize(f"  Invalid offset: {target}", "red"))
+        return None, None
+
+
 def _reorder_within_cluster(
     args: argparse.Namespace,
     plan: dict,
@@ -87,20 +131,16 @@ def _reorder_within_cluster(
         print(colorize("  --item requires exactly one cluster name.", "red"))
         return
     cluster_name = cluster_names[0]
-    cluster_member_set = set(clusters[cluster_name].get("issue_ids", []))
-
-    state = command_runtime(args).state
-    item_ids = resolve_ids_from_patterns(state, [item_pattern], plan=plan)
-    if not item_ids:
-        print(colorize("  No matching issues found for --item pattern.", "yellow"))
+    context = _resolve_item_reorder_context(
+        args,
+        plan=plan,
+        clusters=clusters,
+        cluster_name=cluster_name,
+        item_pattern=item_pattern,
+    )
+    if context is None:
         return
-    for fid in item_ids:
-        if fid not in cluster_member_set:
-            print(colorize(f"  {fid!r} is not a member of cluster {cluster_name!r}.", "red"))
-            return
-
-    queue_order: list[str] = plan.get("queue_order", [])
-    ordered_slice = [fid for fid in queue_order if fid in cluster_member_set]
+    state, cluster_member_set, item_ids, ordered_slice = context
 
     result = _resolve_item_position(
         position,
@@ -138,14 +178,9 @@ def _reorder_whole_clusters(
     """Reorder entire clusters as blocks relative to each other."""
     target = resolve_target(plan, target, position)
 
-    offset = None
-    if position in ("up", "down") and target is not None:
-        try:
-            offset = int(target)
-        except (ValueError, TypeError):
-            print(colorize(f"  Invalid offset: {target}", "red"))
-            return
-        target = None
+    target, offset = _resolve_reorder_offset(position, target)
+    if position in ("up", "down") and offset is None and target is None:
+        return
 
     seen: set[str] = set()
     all_member_ids: list[str] = []
@@ -182,10 +217,8 @@ def _cmd_cluster_reorder(args: argparse.Namespace) -> None:
     plan = load_plan()
     clusters = plan.get("clusters", {})
 
-    for name in cluster_names:
-        if name not in clusters:
-            print(colorize(f"  Cluster {name!r} does not exist.", "red"))
-            return
+    if _validate_cluster_members(cluster_names, clusters) is None:
+        return
 
     if item_pattern is not None:
         _reorder_within_cluster(args, plan, clusters, cluster_names, position, target, item_pattern)

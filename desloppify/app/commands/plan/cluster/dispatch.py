@@ -32,51 +32,79 @@ from ..cluster_update import cmd_cluster_update as _cmd_cluster_update_impl
 _HEX8_RE = re.compile(r"^[0-9a-f]{8}$")
 
 
-def _suggest_close_matches(state: dict, plan: dict | None, patterns: list[str]) -> None:
-    """Print fuzzy match suggestions for patterns that resolved to zero issues."""
+def _collect_known_issue_ids(state: dict, plan: dict | None) -> list[str]:
+    """Collect known issue IDs from state and plan contexts."""
     all_ids: list[str] = list(state.get("issues", {}).keys())
-    if plan is not None:
-        seen_ids: set[str] = set(all_ids)
-        for fid in plan.get("queue_order", []):
+    if plan is None:
+        return all_ids
+    seen_ids: set[str] = set(all_ids)
+    for fid in plan.get("queue_order", []):
+        if fid in seen_ids:
+            continue
+        seen_ids.add(fid)
+        all_ids.append(fid)
+    for cluster in plan.get("clusters", {}).values():
+        for fid in cluster.get("issue_ids", []):
             if fid in seen_ids:
                 continue
             seen_ids.add(fid)
             all_ids.append(fid)
-        for cluster in plan.get("clusters", {}).values():
-            for fid in cluster.get("issue_ids", []):
-                if fid in seen_ids:
-                    continue
-                seen_ids.add(fid)
-                all_ids.append(fid)
+    return all_ids
+
+
+def _resolve_hex_match_suggestions(all_ids: list[str], pattern: str) -> tuple[list[str], str | None]:
+    suffix = pattern.split("::")[-1]
+    suggestions = [fid for fid in all_ids if fid.endswith(f"::{suffix}") or fid == suffix]
+    return suggestions, f"match by hash suffix alone: {suffix}"
+
+
+def _resolve_segment_match_suggestions(
+    all_ids: list[str],
+    *,
+    last_segment: str,
+    slug: str,
+) -> tuple[list[str], str | None]:
+    suggestions: list[str] = []
+    for fid in all_ids:
+        if f"::{last_segment}::" in fid or fid.endswith(f"::{last_segment}"):
+            suggestions.append(fid)
+            continue
+        if slug and (f"::{slug}::" in fid or fid.endswith(f"::{slug}")):
+            suggestions.append(fid)
+    return suggestions, None
+
+
+def _pattern_suggestions(all_ids: list[str], pattern: str) -> tuple[list[str], str | None]:
+    segments = pattern.split("::")
+    last_seg = segments[-1]
+    if _HEX8_RE.match(last_seg):
+        return _resolve_hex_match_suggestions(all_ids, pattern)
+    slug = segments[-2] if len(segments) >= 2 else ""
+    return _resolve_segment_match_suggestions(
+        all_ids,
+        last_segment=last_seg,
+        slug=slug,
+    )
+
+
+def _print_match_suggestions(pattern: str, suggestions: list[str], *, tip: str | None) -> None:
+    if not suggestions:
+        return
+    print(colorize(f"  No match for: {pattern!r}", "yellow"))
+    print(colorize("  Did you mean:", "dim"))
+    for match in suggestions[:3]:
+        print(colorize(f"    {match}", "dim"))
+    if tip:
+        print(colorize(f"  Tip: {tip}", "dim"))
+
+
+def _suggest_close_matches(state: dict, plan: dict | None, patterns: list[str]) -> None:
+    """Print fuzzy match suggestions for patterns that resolved to zero issues."""
+    all_ids = _collect_known_issue_ids(state, plan)
 
     for pattern in patterns:
-        segments = pattern.split("::")
-        last_seg = segments[-1]
-
-        if _HEX8_RE.match(last_seg):
-            suggestions = [
-                fid for fid in all_ids if fid.endswith(f"::{last_seg}") or fid == last_seg
-            ]
-            tip = f"match by hash suffix alone: {last_seg}"
-        else:
-            slug = segments[-2] if len(segments) >= 2 else ""
-            suggestions = []
-            for fid in all_ids:
-                if f"::{last_seg}::" in fid or fid.endswith(f"::{last_seg}"):
-                    suggestions.append(fid)
-                    continue
-                if slug and (f"::{slug}::" in fid or fid.endswith(f"::{slug}")):
-                    suggestions.append(fid)
-            tip = None
-
-        if not suggestions:
-            continue
-        print(colorize(f"  No match for: {pattern!r}", "yellow"))
-        print(colorize("  Did you mean:", "dim"))
-        for match in suggestions[:3]:
-            print(colorize(f"    {match}", "dim"))
-        if tip:
-            print(colorize(f"  Tip: {tip}", "dim"))
+        suggestions, tip = _pattern_suggestions(all_ids, pattern)
+        _print_match_suggestions(pattern, suggestions, tip=tip)
 
 
 def _print_pattern_hints() -> None:

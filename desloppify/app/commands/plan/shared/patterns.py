@@ -59,6 +59,55 @@ def _queue_pattern_matches(queue_ids: set[str], pattern: str) -> list[str]:
     return sorted(set(matches))
 
 
+def _append_matches(
+    matches: list[str],
+    *,
+    seen: set[str],
+    result: list[str],
+) -> bool:
+    if not matches:
+        return False
+    for issue_id in matches:
+        _append_unique(issue_id, seen, result)
+    return True
+
+
+def _queue_ids_for_pattern(
+    state: StateModel,
+    *,
+    plan: PlanModel | None,
+    queue_ids: set[str] | None,
+) -> set[str]:
+    if queue_ids is not None:
+        return queue_ids
+    return _collect_queue_ids(state, plan)
+
+
+def _resolve_pattern_match_ids(
+    state: StateModel,
+    pattern: str,
+    *,
+    plan: PlanModel | None,
+    plan_ids: set[str],
+    queue_ids: set[str] | None,
+) -> tuple[list[str], set[str] | None]:
+    matches = match_issues(state, pattern, status_filter="open")
+    if matches:
+        return [issue["id"] for issue in matches], queue_ids
+    if pattern in plan_ids:
+        return [pattern], queue_ids
+    plan_matches = _queue_pattern_matches(plan_ids, pattern)
+    if plan_matches:
+        return plan_matches, queue_ids
+    next_queue_ids = _queue_ids_for_pattern(state, plan=plan, queue_ids=queue_ids)
+    queue_matches = _queue_pattern_matches(next_queue_ids, pattern)
+    if queue_matches:
+        return queue_matches, next_queue_ids
+    if plan is not None and pattern in plan.get("clusters", {}):
+        return list(plan["clusters"][pattern].get("issue_ids", [])), next_queue_ids
+    return [], next_queue_ids
+
+
 def resolve_ids_from_patterns(
     state: StateModel,
     patterns: list[str],
@@ -78,32 +127,14 @@ def resolve_ids_from_patterns(
     queue_ids: set[str] | None = None
 
     for pattern in patterns:
-        matches = match_issues(state, pattern, status_filter=status_filter)
-        if matches:
-            for issue in matches:
-                _append_unique(issue["id"], seen, result)
-            continue
-        if pattern in plan_ids:
-            # Literal plan ID (e.g. subjective::foo) not in state issues.
-            _append_unique(pattern, seen, result)
-            continue
-        # Glob/prefix match against plan IDs (skipped, queued, clustered).
-        plan_matches = _queue_pattern_matches(plan_ids, pattern)
-        if plan_matches:
-            for issue_id in plan_matches:
-                _append_unique(issue_id, seen, result)
-            continue
-        if queue_ids is None:
-            queue_ids = _collect_queue_ids(state, plan)
-        queue_matches = _queue_pattern_matches(queue_ids, pattern)
-        if queue_matches:
-            for issue_id in queue_matches:
-                _append_unique(issue_id, seen, result)
-            continue
-        if plan is not None and pattern in plan.get("clusters", {}):
-            # Cluster name -> expand to member IDs.
-            for issue_id in plan["clusters"][pattern].get("issue_ids", []):
-                _append_unique(issue_id, seen, result)
+        matches, queue_ids = _resolve_pattern_match_ids(
+            state,
+            pattern,
+            plan=plan,
+            plan_ids=plan_ids,
+            queue_ids=queue_ids,
+        )
+        _append_matches(matches, seen=seen, result=result)
     return result
 
 
