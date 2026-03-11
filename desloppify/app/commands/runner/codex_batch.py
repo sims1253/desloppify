@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -26,8 +27,9 @@ def codex_batch_command(*, prompt: str, repo_root: Path, output_file: Path) -> l
     effort = os.environ.get("DESLOPPIFY_CODEX_REASONING_EFFORT", "low").strip().lower()
     if effort not in {"low", "medium", "high", "xhigh"}:
         effort = "low"
+    codex = shutil.which("codex") or "codex"
     return [
-        "codex",
+        codex,
         "exec",
         "--ephemeral",
         "-C",

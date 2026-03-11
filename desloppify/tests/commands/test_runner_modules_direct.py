@@ -18,7 +18,8 @@ def test_codex_batch_command_uses_sanitized_reasoning_effort(monkeypatch, tmp_pa
         output_file=tmp_path / "out.json",
     )
 
-    assert command[:3] == ["codex", "exec", "--ephemeral"]
+    assert command[0].endswith("codex") or command[0] == "codex"
+    assert command[1:3] == ["exec", "--ephemeral"]
     assert f'model_reasoning_effort="high"' in command
     assert str(tmp_path) in command
 
