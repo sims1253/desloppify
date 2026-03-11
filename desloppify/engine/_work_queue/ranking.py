@@ -6,7 +6,7 @@ import logging
 from typing import Any, cast
 
 from desloppify.base.registry import DETECTORS
-from desloppify.engine._plan.constants import TRIAGE_STAGE_ORDER
+from desloppify.engine.plan_triage import TRIAGE_STAGE_ORDER
 from desloppify.engine._scoring.results.health import compute_health_breakdown
 from desloppify.engine._scoring.results.impact import get_dimension_for_detector
 from desloppify.engine._state.filtering import path_scoped_issues

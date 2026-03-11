@@ -6,6 +6,8 @@ from desloppify.engine._plan.constants import (
     TRIAGE_IDS,
     TRIAGE_PREFIX,
     TRIAGE_STAGE_IDS,
+    TRIAGE_STAGE_ORDER,
+    TRIAGE_STAGE_SPECS,
 )
 from desloppify.engine._plan.triage.core import (
     TriageInput,
@@ -105,6 +107,8 @@ __all__ = [
     "TRIAGE_STAGE_DEPENDENCIES",
     "TRIAGE_STAGE_IDS",
     "TRIAGE_STAGE_LABELS",
+    "TRIAGE_STAGE_ORDER",
+    "TRIAGE_STAGE_SPECS",
     "TriageStartDecision",
     "TriageInput",
     "build_triage_prompt",

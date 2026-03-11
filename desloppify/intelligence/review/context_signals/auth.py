@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from desloppify.base.signal_patterns import (
     AUTH_GUARD_TOKEN_RE,
+    AUTH_LOOKUP_TOKEN_RE,
     SERVICE_ROLE_TOKEN_RE,
     is_server_only_path,
 )
@@ -20,7 +21,24 @@ _ROUTE_AUTH_RE = re.compile(
     re.MULTILINE,
 )
 _AUTH_GUARD_RE = AUTH_GUARD_TOKEN_RE
-_AUTH_USAGE_RE = re.compile(r"\buseAuth\b|\brequest\.user\b|\bsession\.user\b|\bgetUser\b")
+_AUTH_LOOKUP_RE = AUTH_LOOKUP_TOKEN_RE
+_AUTH_USAGE_RE = re.compile(
+    r"\buseAuth\b|\bgetServerSession\b|\brequest\.user\b|\bsession\.user\b|\bgetUser\b"
+    r"|\bauth\.getUser\b|\bsupabase\.auth(?:\.getUser)?\b"
+)
+_AUTH_DENIAL_RE = re.compile(
+    r"\b(?:401|403|unauthori[sz]ed|forbidden)\b"
+    r"|NextResponse\.redirect\b|\bredirect\s*\("
+    r"|new\s+Response\s*\([^)]*status\s*:\s*(?:401|403)"
+    r"|abort\s*\(\s*(?:401|403)"
+    r"|HTTPException\s*\([^)]*status_code\s*=\s*(?:401|403)",
+    re.IGNORECASE,
+)
+_NEGATED_AUTH_BRANCH_RE = re.compile(
+    r"\bif\s*\(\s*!\s*[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?\s*\)"
+    r"|\bif\s+not\s+[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)?",
+    re.IGNORECASE,
+)
 _PUBLIC_ROUTE_RE = re.compile(
     r"\b(?:allow_anonymous|allowanonymous|permit_all|public[_\s-]?route|public_endpoint)\b|@\s*public\b",
     re.IGNORECASE,
@@ -165,7 +183,7 @@ def gather_auth_context(
             auth_count = 0
             public_count = 0
             for segment in route_segments:
-                if _AUTH_GUARD_RE.search(segment):
+                if _segment_has_auth_enforcement(segment):
                     auth_count += 1
                 elif _PUBLIC_ROUTE_RE.search(segment):
                     public_count += 1
@@ -239,6 +257,15 @@ def _route_segments(content: str) -> list[str]:
         end = matches[idx + 1].start() if idx + 1 < len(matches) else len(content)
         segments.append(content[start:end])
     return segments
+
+
+def _segment_has_auth_enforcement(segment: str) -> bool:
+    """Return True when a route segment contains an actual auth guard, not just lookup."""
+    if _AUTH_GUARD_RE.search(segment):
+        return True
+    if not _AUTH_LOOKUP_RE.search(segment):
+        return False
+    return bool(_NEGATED_AUTH_BRANCH_RE.search(segment) and _AUTH_DENIAL_RE.search(segment))
 
 
 def _is_auth_source_file(filepath: str) -> bool:

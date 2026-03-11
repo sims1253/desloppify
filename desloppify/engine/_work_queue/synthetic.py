@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from desloppify.engine._plan.constants import TRIAGE_STAGE_SPECS
+from desloppify.engine.plan_triage import TRIAGE_STAGE_SPECS
 from desloppify.engine._scoring.subjective.core import DISPLAY_NAMES
 from desloppify.engine._state.schema import StateModel
 from desloppify.engine._work_queue.helpers import (

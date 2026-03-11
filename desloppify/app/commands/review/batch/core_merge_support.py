@@ -97,7 +97,7 @@ def _weighted_batch_score(
     issues: list[BatchIssuePayload],
     dimension_notes: dict[str, BatchDimensionNotePayload],
 ) -> tuple[float, float]:
-    score_value = float(score)
+    score_value = float(score)  # type: ignore[arg-type]
     weight = assessment_weight(
         dimension=key,
         issues=issues,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shlex
 
-from desloppify.engine._plan.constants import TRIAGE_STAGE_SPECS
+from desloppify.engine.plan_triage import TRIAGE_STAGE_SPECS
 from desloppify.engine.plan_queue import (
     WORKFLOW_COMMUNICATE_SCORE_ID,
     WORKFLOW_CREATE_PLAN_ID,

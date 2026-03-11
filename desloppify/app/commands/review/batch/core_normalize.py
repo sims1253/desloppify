@@ -234,7 +234,7 @@ def _build_normalized_issue(
 
 def _build_dismissed_concern_payload(issue: ReviewIssuePayload) -> BatchIssuePayload:
     """Return a minimal dismissed-concern payload preserved for later import."""
-    payload: BatchIssuePayload = {
+    payload: BatchIssuePayload = {  # type: ignore[assignment]
         "concern_verdict": "dismissed",
         "concern_fingerprint": str(issue.get("concern_fingerprint", "")).strip(),
     }
