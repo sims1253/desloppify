@@ -10,7 +10,7 @@ from desloppify.app.commands.helpers.queue_progress import (
     format_queue_headline,
 )
 from desloppify.app.commands.helpers.runtime import command_runtime
-from desloppify.app.commands.helpers.state import require_completed_scan
+from desloppify.app.commands.helpers.state import require_issue_inventory
 from desloppify.app.commands.next.render_support import CLUSTER_TYPE_LABELS
 from desloppify.base.output.terminal import colorize, print_table
 from desloppify.engine._work_queue.core import (
@@ -233,7 +233,7 @@ def cmd_plan_queue(args: argparse.Namespace) -> None:
     """Render a compact table of all upcoming queue items."""
     runtime = command_runtime(args)
     state = runtime.state
-    if not require_completed_scan(state):
+    if not require_issue_inventory(state):
         return
 
     top = getattr(args, "top", 30)

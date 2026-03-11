@@ -107,7 +107,7 @@ class TestReflectFoldConfirmObserve:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         attestation = (
@@ -142,7 +142,7 @@ class TestReflectFoldConfirmObserve:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         reflect_report = (
@@ -165,7 +165,7 @@ class TestReflectFoldConfirmObserve:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         # Attestation that does NOT reference any dimension
@@ -208,7 +208,7 @@ class TestOrganizeFoldConfirmReflect:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         # Attestation references a cluster name
@@ -258,7 +258,7 @@ class TestCompleteFoldConfirmOrganize:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         # Attestation references a cluster name
@@ -300,7 +300,7 @@ class TestExistingConfirmPathUnchanged:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         attestation = (
@@ -333,7 +333,7 @@ class TestCompleteArchivesStages:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         strategy = (

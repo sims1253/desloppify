@@ -47,20 +47,6 @@ class QueueViewConfig:
     show_execution_prompt: bool
 
 
-@dataclass(frozen=True, slots=True)
-class QueueRenderContext:
-    queue: dict
-    items: list[dict]
-    state: dict
-    plan_for_queue: dict
-    plan_data: dict | None
-    ctx: object
-    target_strict: float
-    opts: NextOptions
-    command_name: str
-    show_plan_context: bool
-
-
 def _build_next_payload(
     *,
     queue: dict,
@@ -144,97 +130,114 @@ def _write_next_payload(
 
 def _render_empty_queue_view(
     *,
-    render_context: QueueRenderContext,
+    queue: dict,
+    items: list[dict],
+    state: dict,
+    plan_for_queue: dict,
+    plan_data: dict | None,
+    ctx,
+    target_strict: float,
+    opts: NextOptions,
     guardrail_warnings: list[str],
     write_query_fn,
+    command_name: str,
+    show_plan_context: bool,
 ) -> None:
     """Render and persist the empty queue state."""
-    strict_score = state_mod.score_snapshot(render_context.state).strict
+    strict_score = state_mod.score_snapshot(state).strict
     plan_start_strict = None
-    if render_context.show_plan_context and render_context.plan_for_queue:
+    if show_plan_context and plan_for_queue:
         plan_start_strict, _ = _plan_queue_context(
-            state=render_context.state,
-            plan_data=render_context.plan_for_queue,
-            context=render_context.ctx,
+            state=state,
+            plan_data=plan_for_queue,
+            context=ctx,
         )
-    _render_queue_header(render_context.queue, render_context.opts.explain)
+    _render_queue_header(queue, opts.explain)
     _show_empty_queue(
-        render_context.queue,
+        queue,
         strict_score,
         plan_start_strict=plan_start_strict,
-        target_strict=render_context.target_strict,
+        target_strict=target_strict,
     )
     _write_next_payload(
-        queue=render_context.queue,
-        items=render_context.items,
-        state=render_context.state,
+        queue=queue,
+        items=items,
+        state=state,
         narrative={},
-        plan_data=render_context.plan_data,
+        plan_data=plan_data,
         guardrail_warnings=guardrail_warnings,
         write_query_fn=write_query_fn,
-        command_name=render_context.command_name,
+        command_name=command_name,
     )
 
 
 def _render_terminal_queue_view(
     *,
-    render_context: QueueRenderContext,
+    queue: dict,
+    items: list[dict],
+    state: dict,
+    opts: NextOptions,
+    plan_for_queue: dict,
+    plan_data: dict | None,
     effective_cluster: str | None,
+    target_strict: float,
+    ctx,
+    show_plan_context: bool,
     show_execution_prompt: bool,
 ) -> None:
     """Render terminal output for a non-empty queue."""
-    dim_scores = render_context.state.get("dimension_scores", {})
+    dim_scores = state.get("dimension_scores", {})
     issues_scoped = state_mod.path_scoped_issues(
-        render_context.state.get("issues", {}),
-        render_context.state.get("scan_path"),
+        state.get("issues", {}),
+        state.get("scan_path"),
     )
     plan_start_strict = None
     breakdown = None
-    if render_context.show_plan_context:
+    if show_plan_context:
         plan_start_strict, breakdown = _plan_queue_context(
-            state=render_context.state,
-            plan_data=render_context.plan_for_queue,
-            context=render_context.ctx,
+            state=state,
+            plan_data=plan_for_queue,
+            context=ctx,
         )
     queue_total = breakdown.queue_total if breakdown else 0
 
-    _render_queue_header(render_context.queue, render_context.opts.explain)
-    strict_score = state_mod.score_snapshot(render_context.state).strict
+    _render_queue_header(queue, opts.explain)
+    strict_score = state_mod.score_snapshot(state).strict
     if _show_empty_queue(
-        render_context.queue,
+        queue,
         strict_score,
         plan_start_strict=plan_start_strict,
-        target_strict=render_context.target_strict,
+        target_strict=target_strict,
     ):
         return
 
-    potentials = _merge_potentials_safe(render_context.state.get("potentials", {}))
+    potentials = _merge_potentials_safe(state.get("potentials", {}))
     next_render_mod.render_terminal_items(
-        render_context.items,
+        items,
         dim_scores,
         issues_scoped,
-        group=render_context.opts.group,
-        explain=render_context.opts.explain,
+        group=opts.group,
+        explain=opts.explain,
         potentials=potentials,
-        plan=render_context.plan_data,
+        plan=plan_data,
         cluster_filter=effective_cluster,
     )
-    next_nudges_mod.render_single_item_resolution_hint(render_context.items)
-    if render_context.show_plan_context:
-        next_nudges_mod.render_uncommitted_reminder(render_context.plan_data)
+    next_nudges_mod.render_single_item_resolution_hint(items)
+    if show_plan_context:
+        next_nudges_mod.render_uncommitted_reminder(plan_data)
         next_nudges_mod.render_followup_nudges(
-            render_context.state,
+            state,
             dim_scores,
             issues_scoped,
             strict_score=strict_score,
-            target_strict_score=render_context.target_strict,
+            target_strict_score=target_strict,
             queue_total=queue_total,
             plan_start_strict=plan_start_strict,
             breakdown=breakdown,
         )
     print()
 
-    if render_context.items and render_context.plan_data and show_execution_prompt:
+    if items and plan_data and show_execution_prompt:
         print_user_message(
             "Start working on the task above. When done:"
             " `desloppify plan resolve`. Full queue:"
@@ -307,24 +310,20 @@ def _build_and_render_queue_view(
         queue["items"] = items
         queue["total"] = len(items)
 
-    render_context = QueueRenderContext(
-        queue=queue,
-        items=items,
-        state=state,
-        plan_for_queue=plan_for_queue,
-        plan_data=plan_data,
-        ctx=ctx,
-        target_strict=target_strict,
-        opts=opts,
-        command_name=view.command_name,
-        show_plan_context=view.show_plan_context,
-    )
-
     if not items:
         _render_empty_queue_view(
-            render_context=render_context,
+            queue=queue,
+            items=items,
+            state=state,
+            plan_for_queue=plan_for_queue,
+            plan_data=plan_data,
+            ctx=ctx,
+            target_strict=target_strict,
+            opts=opts,
             guardrail_warnings=guardrail_warnings,
             write_query_fn=write_query_fn,
+            command_name=view.command_name,
+            show_plan_context=view.show_plan_context,
         )
         return
 
@@ -349,8 +348,16 @@ def _build_and_render_queue_view(
         return
 
     _render_terminal_queue_view(
-        render_context=render_context,
+        queue=queue,
+        items=items,
+        state=state,
+        opts=opts,
+        plan_for_queue=plan_for_queue,
+        plan_data=plan_data,
         effective_cluster=effective_cluster,
+        target_strict=target_strict,
+        ctx=ctx,
+        show_plan_context=view.show_plan_context,
         show_execution_prompt=view.show_execution_prompt,
     )
 
@@ -455,7 +462,6 @@ def build_and_render_queue(
 
 
 __all__ = [
-    "QueueRenderContext",
     "QueueViewConfig",
     "build_and_render_backlog_queue",
     "build_and_render_execution_queue",

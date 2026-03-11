@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable
 
+from desloppify.base.output.terminal import colorize
 from desloppify.engine.plan_triage import TRIAGE_CMD_OBSERVE
 
 from . import helpers as _helpers_mod
@@ -152,12 +153,12 @@ def run_triage_workflow(
     args: argparse.Namespace,
     *,
     services: TriageServices,
-    require_completed_scan_fn: Callable[[dict], bool],
+    require_issue_inventory_fn: Callable[[dict], bool],
 ) -> None:
     """Route `plan triage` args through one orchestration seam."""
     runtime = services.command_runtime(args)
     state = runtime.state
-    if not require_completed_scan_fn(state):
+    if not require_issue_inventory_fn(state):
         return
 
     if getattr(args, "stage_prompt", None):

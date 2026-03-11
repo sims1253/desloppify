@@ -86,7 +86,7 @@ class TestConfirmObserve:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         args = _fake_args(confirm="observe")
         triage_mod.cmd_plan_triage(args)
@@ -103,7 +103,7 @@ class TestConfirmObserve:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         args = _fake_args(confirm="observe", attestation="too short")
         triage_mod.cmd_plan_triage(args)
@@ -120,7 +120,7 @@ class TestConfirmObserve:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: saved_plans.append(True))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         attestation = "I have thoroughly reviewed all 2 issues across abstraction_fitness dimension and identified root causes in modules"
         args = _fake_args(confirm="observe", attestation=attestation)
@@ -139,7 +139,7 @@ class TestConfirmObserve:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         args = _fake_args(confirm="observe", attestation="I have reviewed everything thoroughly and completely")
         triage_mod.cmd_plan_triage(args)
@@ -159,7 +159,7 @@ class TestReflectGate:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         report = "A sufficiently long report about strategy and comparing issues r1 r2 against completed work and more text"
         args = _fake_args(stage="reflect", report=report)
@@ -175,7 +175,7 @@ class TestReflectGate:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: None)
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         report = "A sufficiently long report about strategy and comparing issues r1 r2 against completed work and more text"
         args = _fake_args(stage="reflect", report=report)
@@ -199,7 +199,7 @@ class TestConfirmReflect:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         args = _fake_args(confirm="reflect")
         triage_mod.cmd_plan_triage(args)
@@ -218,7 +218,7 @@ class TestConfirmReflect:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: saved_plans.append(True))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         attestation = (
             "I have thoroughly reviewed the abstraction fitness dimension strategy "
@@ -244,7 +244,7 @@ class TestOrganizeGate:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         report = "A sufficiently long organize report about my clusters r1 r2 and their priorities and ordering details for this plan"
         args = _fake_args(stage="organize", report=report)
@@ -273,7 +273,7 @@ class TestConfirmOrganize:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         args = _fake_args(confirm="organize")
         triage_mod.cmd_plan_triage(args)
@@ -303,7 +303,7 @@ class TestCompleteGate:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: None)
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         strategy = "A" * 200
         args = _fake_args(complete=True, strategy=strategy)
@@ -331,7 +331,7 @@ class TestConfirmExistingRequiresConfirmed:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         note = "A" * 100 + " r1"
         args = _fake_args(confirm_existing=True, note=note, strategy="same")
@@ -354,7 +354,7 @@ class TestTriageStart:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: None)
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         args = _fake_args(start=True)
         triage_mod.cmd_plan_triage(args)
@@ -370,7 +370,7 @@ class TestTriageStart:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: None)
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         args = _fake_args(start=True)
         triage_mod.cmd_plan_triage(args)
@@ -394,7 +394,7 @@ class TestTriageStart:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: None)
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         args = _fake_args(start=True)
         triage_mod.cmd_plan_triage(args)

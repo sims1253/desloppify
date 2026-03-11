@@ -36,7 +36,7 @@ def test_cmd_backlog_uses_backlog_queue(monkeypatch) -> None:
             state_path="/tmp/fake-state.json",
         ),
     )
-    monkeypatch.setattr(backlog_mod, "require_completed_scan", lambda _state: True)
+    monkeypatch.setattr(backlog_mod, "require_issue_inventory", lambda _state: True)
     monkeypatch.setattr(backlog_mod, "check_config_staleness", lambda _config: None)
 
     def _build_and_render(*_args, **kwargs):

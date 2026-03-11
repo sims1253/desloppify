@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 
 from desloppify.app.commands.helpers.runtime import command_runtime
-from desloppify.app.commands.helpers.state import require_completed_scan
+from desloppify.app.commands.helpers.state import require_issue_inventory
 from desloppify.engine.plan_state import (
     load_plan,
     save_plan,
@@ -45,7 +45,7 @@ def cmd_plan_triage(args: argparse.Namespace) -> None:
     _workflow_mod.run_triage_workflow(
         args,
         services=resolved_services,
-        require_completed_scan_fn=require_completed_scan,
+        require_issue_inventory_fn=require_issue_inventory,
     )
 
 

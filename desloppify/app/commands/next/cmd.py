@@ -8,7 +8,7 @@ from desloppify.app.commands.helpers.guardrails import print_triage_guardrail_in
 from desloppify.app.commands.helpers.lang import resolve_lang
 from desloppify.app.commands.helpers.query import write_query
 from desloppify.app.commands.helpers.runtime import command_runtime
-from desloppify.app.commands.helpers.state import require_completed_scan
+from desloppify.app.commands.helpers.state import require_issue_inventory
 from desloppify.app.skill_docs import check_skill_version
 from desloppify.base.output.terminal import colorize
 from desloppify.base.tooling import check_config_staleness
@@ -28,7 +28,7 @@ def cmd_next(args: argparse.Namespace) -> None:
     runtime = command_runtime(args)
     state = runtime.state
     config = runtime.config
-    if not require_completed_scan(state):
+    if not require_issue_inventory(state):
         return
 
     skill_warning = check_skill_version()

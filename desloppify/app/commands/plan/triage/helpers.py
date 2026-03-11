@@ -236,16 +236,37 @@ def has_open_review_issues(state: StateModel | dict | None) -> bool:
 
 
 def cluster_issue_ids(cluster: Cluster) -> list[str]:
-    """Return canonical cluster member IDs after plan-load normalization."""
-    issue_ids = cluster.get("issue_ids", [])
-    if not isinstance(issue_ids, list):
-        return []
-    return [issue_id for issue_id in issue_ids if isinstance(issue_id, str) and issue_id]
+    """Return the effective issue IDs for a cluster.
 
+    Falls back to ``action_steps[*].issue_refs`` when ``issue_ids`` is empty,
+    since some saved plans retain membership only in step refs.
+    """
+    ordered: list[str] = []
+    seen: set[str] = set()
 
-def _cluster_issue_ids(cluster: Cluster) -> list[str]:
-    """Backward-compatible alias for internal imports."""
-    return cluster_issue_ids(cluster)
+    def _append(raw_ids: object) -> None:
+        if not isinstance(raw_ids, list):
+            return
+        for raw_id in raw_ids:
+            if not isinstance(raw_id, str):
+                continue
+            issue_id = raw_id.strip()
+            if not issue_id or issue_id in seen:
+                continue
+            seen.add(issue_id)
+            ordered.append(issue_id)
+
+    _append(cluster.get("issue_ids"))
+
+    steps = cluster.get("action_steps")
+    if isinstance(steps, list):
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            _append(step.get("issue_refs"))
+
+    return ordered
+
 
 
 def plan_review_ids(plan: PlanModel) -> list[str]:

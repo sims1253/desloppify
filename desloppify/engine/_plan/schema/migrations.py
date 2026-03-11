@@ -87,15 +87,37 @@ def _normalize_cluster_issue_id(raw_id: object) -> str | None:
     issue_id = raw_id.strip()
     if not issue_id:
         return None
-    if not (
-        issue_id.startswith("review::")
-        or issue_id.startswith("concerns::")
-    ):
+    if _HEX_SUFFIX_RE.fullmatch(issue_id):
         return None
-    parts = issue_id.split("::")
-    if len(parts) >= 2 and _HEX_SUFFIX_RE.fullmatch(parts[-1]):
-        return "::".join(parts[:-1])
+    if issue_id.startswith("review::") or issue_id.startswith("concerns::"):
+        parts = issue_id.split("::")
+        if len(parts) >= 2 and _HEX_SUFFIX_RE.fullmatch(parts[-1]):
+            return "::".join(parts[:-1])
     return issue_id
+
+
+def _override_cluster_members(plan: dict[str, Any]) -> dict[str, list[str]]:
+    members: dict[str, list[str]] = {}
+    seen_by_cluster: dict[str, set[str]] = {}
+    overrides = plan.get("overrides", {})
+    if not isinstance(overrides, dict):
+        return members
+
+    for issue_id, override in overrides.items():
+        normalized_issue_id = _normalize_cluster_issue_id(issue_id)
+        if normalized_issue_id is None or not isinstance(override, dict):
+            continue
+        cluster_name = override.get("cluster")
+        if not isinstance(cluster_name, str) or not cluster_name.strip():
+            continue
+        cluster_name = cluster_name.strip()
+        bucket = members.setdefault(cluster_name, [])
+        seen = seen_by_cluster.setdefault(cluster_name, set())
+        if normalized_issue_id in seen:
+            continue
+        seen.add(normalized_issue_id)
+        bucket.append(normalized_issue_id)
+    return members
 
 
 def _execution_log_cluster_members(
@@ -153,6 +175,7 @@ def _execution_log_cluster_members(
 
 def normalize_cluster_defaults(plan: dict[str, Any]) -> None:
     recovered_members, hash_lookup = _execution_log_cluster_members(plan)
+    override_members = _override_cluster_members(plan)
 
     for cluster in plan["clusters"].values():
         if not isinstance(cluster, dict):
@@ -184,6 +207,8 @@ def normalize_cluster_defaults(plan: dict[str, Any]) -> None:
         cluster_name = cluster.get("name")
         if isinstance(cluster_name, str):
             for raw_id in recovered_members.get(cluster_name, []):
+                _append(raw_id)
+            for raw_id in override_members.get(cluster_name, []):
                 _append(raw_id)
 
         cluster["issue_ids"] = normalized_issue_ids

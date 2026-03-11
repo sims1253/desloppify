@@ -87,7 +87,7 @@ class TestObserveLogging:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: None)
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         report = "A sufficiently long analysis of themes and root causes across the codebase with contradictions noted"
         args = _fake_args(stage="observe", report=report)
@@ -107,7 +107,7 @@ class TestConfirmObserveLogging:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: None)
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         attestation = "I have thoroughly reviewed all 2 issues across abstraction_fitness dimension and identified root causes in modules"
         args = _fake_args(confirm="observe", attestation=attestation)
@@ -127,7 +127,7 @@ class TestReflectLogging:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: None)
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         report = "A sufficiently long report about strategy and comparing issues r1 r2 against completed work and more text"
         args = _fake_args(stage="reflect", report=report)
@@ -153,7 +153,7 @@ class TestCompleteLogging:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: None)
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         strategy = "A detailed strategy describing execution order, priorities, verification approach, " * 3
         args = _fake_args(complete=True, strategy=strategy)

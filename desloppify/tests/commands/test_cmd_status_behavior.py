@@ -34,9 +34,9 @@ def test_cmd_status_json_mode_bypasses_scan_gate(monkeypatch, capsys) -> None:
     monkeypatch.setattr(status_cmd_mod.state_mod, "suppression_metrics", lambda _state: {})
 
     def _scan_gate_should_not_run(_state: dict) -> bool:
-        raise AssertionError("require_completed_scan should not run for --json")
+        raise AssertionError("require_issue_inventory should not run for --json")
 
-    monkeypatch.setattr(status_cmd_mod, "require_completed_scan", _scan_gate_should_not_run)
+    monkeypatch.setattr(status_cmd_mod, "require_issue_inventory", _scan_gate_should_not_run)
 
     status_cmd_mod.cmd_status(SimpleNamespace(json=True))
     payload = json.loads(capsys.readouterr().out)
@@ -49,7 +49,7 @@ def test_cmd_status_terminal_mode_stops_when_scan_incomplete(monkeypatch) -> Non
     monkeypatch.setattr(status_cmd_mod, "command_runtime", lambda _args: runtime)
     monkeypatch.setattr(status_cmd_mod, "scorecard_dimensions_payload", lambda *_a, **_k: [])
     monkeypatch.setattr(status_cmd_mod.state_mod, "suppression_metrics", lambda _state: {})
-    monkeypatch.setattr(status_cmd_mod, "require_completed_scan", lambda _state: False)
+    monkeypatch.setattr(status_cmd_mod, "require_issue_inventory", lambda _state: False)
 
     called = {"rendered": False}
 
@@ -81,7 +81,7 @@ def test_cmd_status_terminal_mode_passes_computed_context(monkeypatch) -> None:
         lambda *_args, **_kwargs: scorecard,
     )
     monkeypatch.setattr(status_cmd_mod.state_mod, "suppression_metrics", lambda _state: {"x": 1})
-    monkeypatch.setattr(status_cmd_mod, "require_completed_scan", lambda _state: True)
+    monkeypatch.setattr(status_cmd_mod, "require_issue_inventory", lambda _state: True)
 
     def _render(args, **kwargs) -> None:
         captured["args"] = args

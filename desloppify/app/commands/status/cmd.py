@@ -7,7 +7,7 @@ import json
 
 from desloppify import state as state_mod
 from desloppify.app.commands.helpers.runtime import command_runtime
-from desloppify.app.commands.helpers.state import require_completed_scan
+from desloppify.app.commands.helpers.state import require_issue_inventory
 from desloppify.engine._scoring.results.core import compute_health_breakdown
 from desloppify.engine.planning.scorecard_projection import (
     scorecard_dimensions_payload,
@@ -44,7 +44,7 @@ def cmd_status(args: argparse.Namespace) -> None:
         )
         return
 
-    if not require_completed_scan(state):
+    if not require_issue_inventory(state):
         return
 
     render_terminal_status(

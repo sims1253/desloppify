@@ -109,7 +109,7 @@ class TestJumpBackReflect:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         new_report = (
@@ -136,7 +136,7 @@ class TestJumpBackReflect:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         args = _fake_args(stage="reflect")  # No --report
@@ -156,7 +156,7 @@ class TestJumpBackReflect:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         args = _fake_args(stage="reflect")  # No --report (reuse)
@@ -180,7 +180,7 @@ class TestJumpBackObserve:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         new_report = (
@@ -213,7 +213,7 @@ class TestJumpBackThenFoldConfirm:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         # Step 1: Jump back to reflect (reuse) — this clears organize's confirmation
@@ -262,7 +262,7 @@ class TestCompleteJumpBackGuidance:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         strategy = (
@@ -293,7 +293,7 @@ class TestRerunWithoutPriorData:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         args = _fake_args(stage="reflect")  # No --report, no prior data
@@ -320,7 +320,7 @@ class TestStageProgressShowsNeedsConfirm:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         # Jump back to reflect with new report — clears organize confirmation

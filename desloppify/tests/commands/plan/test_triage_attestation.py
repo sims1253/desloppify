@@ -210,7 +210,7 @@ class TestConfirmObserveValidation:
 
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         # 80+ chars but no dimension name
         attestation = "I have thoroughly reviewed all the issues in this codebase and considered every aspect of the analysis carefully"
@@ -232,7 +232,7 @@ class TestConfirmObserveValidation:
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
         monkeypatch.setattr(triage_mod, "save_plan", lambda p, *a, **kw: saved.append(True))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
 
         attestation = "I reviewed the naming dimension issues and identified 3 root causes across the codebase test modules thoroughly"
         assert len(attestation) >= 80

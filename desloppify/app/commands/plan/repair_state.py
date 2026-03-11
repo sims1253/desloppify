@@ -8,7 +8,7 @@ from typing import cast
 
 from desloppify.app.commands.helpers.runtime import command_runtime
 from desloppify.base.output.terminal import colorize
-from desloppify.engine._plan.persistence import load_plan, plan_path_for_state
+from desloppify.engine.plan_state import load_plan, plan_path_for_state
 from desloppify.engine._state.recovery import (
     has_saved_plan_without_scan,
     reconstruct_state_from_saved_plan,

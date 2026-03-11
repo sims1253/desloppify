@@ -174,7 +174,7 @@ def test_run_triage_workflow_uses_recovered_runtime_state(monkeypatch, capsys) -
             dry_run=False,
         ),
         services=_Services(),
-        require_completed_scan_fn=lambda state: scan_gate_calls.append(state) or True,
+        require_issue_inventory_fn=lambda state: scan_gate_calls.append(state) or True,
     )
 
     assert scan_gate_calls

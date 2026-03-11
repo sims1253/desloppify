@@ -66,7 +66,7 @@ class TestAutoStartTriage:
         state = _state_with_issues("r1", "r2", "r3", "r4", "r5")
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         long_report = (
@@ -89,7 +89,7 @@ class TestAutoStartTriage:
         state = _state_with_issues("r1", "r2", "r3", "r4", "r5")
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         long_report = (
@@ -111,7 +111,7 @@ class TestAutoStartTriage:
         state = _state_with_issues("r1", "r2", "r3", "r4", "r5")
         monkeypatch.setattr(triage_mod, "load_plan", lambda *a, **kw: plan)
         monkeypatch.setattr(triage_mod, "command_runtime", lambda args: _fake_runtime(state))
-        monkeypatch.setattr(triage_mod, "require_completed_scan", lambda s: True)
+        monkeypatch.setattr(triage_mod, "require_issue_inventory", lambda s: True)
         monkeypatch.setattr(triage_mod, "save_plan", lambda p: None)
 
         long_report = (

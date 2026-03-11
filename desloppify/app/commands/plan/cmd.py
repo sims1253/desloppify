@@ -11,7 +11,7 @@ from desloppify.app.commands.helpers.queue_progress import (
 )
 from desloppify.app.commands.helpers.rendering import print_agent_plan
 from desloppify.app.commands.helpers.runtime import command_runtime
-from desloppify.app.commands.helpers.state import require_completed_scan
+from desloppify.app.commands.helpers.state import require_issue_inventory
 from desloppify.app.commands.plan.cluster import cmd_cluster_dispatch
 from desloppify.app.commands.plan.commit_log import cmd_commit_log_dispatch
 from desloppify.app.commands.plan.override import (
@@ -56,7 +56,7 @@ def cmd_plan_output(args: argparse.Namespace) -> None:
     runtime = command_runtime(args)
     state = runtime.state
 
-    if not require_completed_scan(state):
+    if not require_issue_inventory(state):
         return
 
     config_warning = check_config_staleness(runtime.config)

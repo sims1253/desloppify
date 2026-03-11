@@ -7,11 +7,6 @@ from pathlib import Path
 from desloppify.app.commands.helpers.lang import auto_detect_lang_name
 from desloppify.base.output.terminal import colorize
 from desloppify.base.discovery.paths import get_project_root
-from desloppify.engine._state.recovery import (
-    has_saved_plan_without_scan,
-    recover_state_from_saved_plan,
-    saved_plan_review_ids,
-)
 from desloppify.engine._state.schema import (
     scan_inventory_available,
     scan_metrics_available,
@@ -67,11 +62,6 @@ def require_issue_inventory(state: dict) -> bool:
     return True
 
 
-def require_completed_scan(state: dict) -> bool:
-    """Backward-compatible alias for inventory-backed command gating."""
-    return require_issue_inventory(state)
-
-
 def require_scan_metrics(state: dict) -> bool:
     """Return True when real scan-derived metrics are available."""
     if not scan_metrics_available(state):
@@ -80,18 +70,8 @@ def require_scan_metrics(state: dict) -> bool:
     return True
 
 
-def _saved_plan_review_ids(plan: dict | None) -> list[str]:
-    """Backward-compatible alias for saved review/concerns recovery IDs."""
-    return saved_plan_review_ids(plan)
-
-
 __all__ = [
-    "_saved_plan_review_ids",
-    "has_saved_plan_without_scan",
-    "recover_state_from_saved_plan",
-    "require_completed_scan",
     "require_issue_inventory",
     "require_scan_metrics",
-    "saved_plan_review_ids",
     "state_path",
 ]

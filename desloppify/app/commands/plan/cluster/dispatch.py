@@ -6,7 +6,7 @@ import argparse
 import re
 
 from desloppify.app.commands.helpers.runtime import command_runtime
-from desloppify.app.commands.helpers.state import require_completed_scan
+from desloppify.app.commands.helpers.state import require_issue_inventory
 from desloppify.engine.plan_state import (
     load_plan,
     save_plan,
@@ -88,7 +88,7 @@ def _print_pattern_hints() -> None:
 
 def _cmd_cluster_add(args: argparse.Namespace) -> None:
     state = command_runtime(args).state
-    if not require_completed_scan(state):
+    if not require_issue_inventory(state):
         return
 
     cluster_name: str = getattr(args, "cluster_name", "")
@@ -145,7 +145,7 @@ def _cmd_cluster_add(args: argparse.Namespace) -> None:
 
 def _cmd_cluster_remove(args: argparse.Namespace) -> None:
     state = command_runtime(args).state
-    if not require_completed_scan(state):
+    if not require_issue_inventory(state):
         return
 
     cluster_name: str = getattr(args, "cluster_name", "")

@@ -13,7 +13,7 @@ from desloppify.app.commands.helpers.attestation import (
     validate_attestation,
 )
 from desloppify.app.commands.helpers.runtime import command_runtime
-from desloppify.app.commands.helpers.state import require_completed_scan
+from desloppify.app.commands.helpers.state import require_issue_inventory
 from desloppify.app.commands.plan.shared.patterns import resolve_ids_from_patterns
 from desloppify.app.commands.plan.override_io import (
     _plan_file_for_state,
@@ -180,7 +180,7 @@ def cmd_plan_skip(args: argparse.Namespace) -> None:
     """Skip issues — unified command for temporary/permanent/false-positive."""
     runtime = command_runtime(args)
     state = runtime.state
-    if not require_completed_scan(state):
+    if not require_issue_inventory(state):
         return
 
     patterns: list[str] = getattr(args, "patterns", [])
@@ -276,7 +276,7 @@ def cmd_plan_unskip(args: argparse.Namespace) -> None:
     """Unskip issues — bring back to queue."""
     runtime = command_runtime(args)
     state = runtime.state
-    if not require_completed_scan(state):
+    if not require_issue_inventory(state):
         return
 
     patterns: list[str] = getattr(args, "patterns", [])

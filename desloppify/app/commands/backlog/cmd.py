@@ -7,7 +7,7 @@ import argparse
 from desloppify.app.commands.helpers.lang import resolve_lang
 from desloppify.app.commands.helpers.query import write_query
 from desloppify.app.commands.helpers.runtime import command_runtime
-from desloppify.app.commands.helpers.state import require_completed_scan
+from desloppify.app.commands.helpers.state import require_issue_inventory
 from desloppify.base.output.terminal import colorize
 from desloppify.base.tooling import check_config_staleness
 from desloppify.engine.plan_state import load_plan
@@ -24,7 +24,7 @@ def cmd_backlog(args: argparse.Namespace) -> None:
     runtime = command_runtime(args)
     state = runtime.state
     config = runtime.config
-    if not require_completed_scan(state):
+    if not require_issue_inventory(state):
         return
 
     config_warning = check_config_staleness(config)

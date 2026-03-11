@@ -10,10 +10,12 @@ from desloppify.app.commands.helpers.rendering import (
     print_replacement_groups,
 )
 from desloppify.app.commands.helpers.state import (
+    require_issue_inventory,
+    state_path,
+)
+from desloppify.engine._state.recovery import (
     has_saved_plan_without_scan,
     recover_state_from_saved_plan,
-    require_completed_scan,
-    state_path,
 )
 from desloppify.app.commands.helpers.subjective import print_subjective_followup
 
@@ -209,29 +211,29 @@ def test_state_path_returns_none_when_nothing_detected(monkeypatch):
     assert result is None
 
 
-# ── state.py: require_completed_scan ──────────────────────────────────
+# ── state.py: require_issue_inventory ─────────────────────────────────
 
 
-def test_require_completed_scan_with_last_scan():
+def test_require_issue_inventory_with_last_scan():
     """Returns True when state has a last_scan entry."""
-    assert require_completed_scan({"last_scan": "2026-01-01"}) is True
+    assert require_issue_inventory({"last_scan": "2026-01-01"}) is True
 
 
-def test_require_completed_scan_without_last_scan(capsys):
+def test_require_issue_inventory_without_last_scan(capsys):
     """Returns False and prints warning when no last_scan."""
-    assert require_completed_scan({}) is False
+    assert require_issue_inventory({}) is False
     out = capsys.readouterr().out
     assert "No scans yet" in out
 
 
-def test_require_completed_scan_none_last_scan(capsys):
+def test_require_issue_inventory_none_last_scan(capsys):
     """Falsy last_scan returns False."""
-    assert require_completed_scan({"last_scan": None}) is False
+    assert require_issue_inventory({"last_scan": None}) is False
 
 
-def test_require_completed_scan_with_plan_reconstructed_inventory():
+def test_require_issue_inventory_with_plan_reconstructed_inventory():
     """Plan-reconstructed state should satisfy inventory-backed command gating."""
-    assert require_completed_scan(
+    assert require_issue_inventory(
         {
             "last_scan": None,
             "scan_metadata": {
