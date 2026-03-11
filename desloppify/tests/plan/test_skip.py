@@ -384,6 +384,21 @@ def test_purge_ids_clears_override_cluster_ref():
     assert plan["overrides"]["a"]["cluster"] is None
 
 
+def test_purge_ids_clears_focus_when_active_cluster_becomes_empty():
+    """purge_ids should leave focus mode when the focused cluster empties."""
+    plan = _plan_with_queue("a")
+    ensure_plan_defaults(plan)
+    create_cluster(plan, "my-cluster")
+    add_to_cluster(plan, "my-cluster", ["a"])
+    plan["active_cluster"] = "my-cluster"
+
+    purged = purge_ids(plan, ["a"])
+
+    assert purged == 1
+    assert plan["clusters"]["my-cluster"]["issue_ids"] == []
+    assert plan["active_cluster"] is None
+
+
 # ---------------------------------------------------------------------------
 # append_log_entry
 # ---------------------------------------------------------------------------

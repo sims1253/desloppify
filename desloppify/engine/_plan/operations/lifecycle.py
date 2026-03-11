@@ -26,6 +26,17 @@ def clear_focus(plan: PlanModel) -> None:
     plan["active_cluster"] = None
 
 
+def clear_focus_if_cluster_empty(plan: PlanModel) -> None:
+    """Clear focus when the active cluster no longer exists or has no members."""
+    ensure_plan_defaults(plan)
+    active = plan.get("active_cluster")
+    if not active:
+        return
+    cluster = plan.get("clusters", {}).get(active)
+    if cluster is None or not cluster.get("issue_ids"):
+        plan["active_cluster"] = None
+
+
 def reset_plan(plan: PlanModel) -> None:
     """Reset plan to empty state, preserving version and created timestamp.
 
@@ -75,7 +86,14 @@ def purge_ids(plan: PlanModel, issue_ids: list[str]) -> int:
         if was_present:
             found += 1
 
+    clear_focus_if_cluster_empty(plan)
     return found
 
 
-__all__ = ["clear_focus", "purge_ids", "reset_plan", "set_focus"]
+__all__ = [
+    "clear_focus",
+    "clear_focus_if_cluster_empty",
+    "purge_ids",
+    "reset_plan",
+    "set_focus",
+]

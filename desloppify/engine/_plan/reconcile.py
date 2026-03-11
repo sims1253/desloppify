@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 from desloppify.engine._plan.annotations import get_issue_note
 from desloppify.engine._plan.constants import SYNTHETIC_PREFIXES
 from desloppify.engine._plan.operations.meta import append_log_entry
+from desloppify.engine._plan.operations.lifecycle import clear_focus_if_cluster_empty
 from desloppify.engine._plan.operations.skip import resurface_stale_skips
 from desloppify.engine._plan.promoted_ids import prune_promoted_ids
 from desloppify.engine._plan.reconcile_review_import import (
@@ -224,6 +225,8 @@ def reconcile_plan_after_scan(
     for name in epic_names_to_delete:
         clusters.pop(name, None)
         result.changes += 1
+
+    clear_focus_if_cluster_empty(plan)
 
     # Resurface stale temporary skips
     scan_count = state.get("scan_count", 0)
