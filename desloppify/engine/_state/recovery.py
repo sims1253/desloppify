@@ -89,14 +89,6 @@ def has_saved_plan_without_scan(state: dict, plan: dict | None) -> bool:
     )
 
 
-def is_saved_plan_recovery_state(state: dict | None) -> bool:
-    """Return True when state was reconstructed from saved plan metadata."""
-    if not isinstance(state, dict):
-        return False
-    marker = state.get("_saved_plan_recovery")
-    return isinstance(marker, dict) and bool(marker.get("active"))
-
-
 def _hydrate_saved_issue_ids(
     state: dict,
     issue_ids: list[str],
@@ -127,14 +119,9 @@ def _hydrate_saved_issue_ids(
     recovered["issues"] = recovered_issues
     recovered["scan_metadata"] = {
         "source": "plan_reconstruction",
-        "inventory_available": bool(issue_ids),
+        "inventory_available": True,
         "metrics_available": False,
         "plan_queue_available": bool(issue_ids),
-        "reconstructed_issue_count": len(issue_ids),
-    }
-    recovered["_saved_plan_recovery"] = {
-        "active": True,
-        "mode": "queue_only",
         "reconstructed_issue_count": len(issue_ids),
     }
     ensure_state_defaults(recovered)
@@ -157,7 +144,6 @@ def reconstruct_state_from_saved_plan(state: dict, plan: dict | None) -> dict:
 
 __all__ = [
     "has_saved_plan_without_scan",
-    "is_saved_plan_recovery_state",
     "reconstruct_state_from_saved_plan",
     "recover_state_from_saved_plan",
     "saved_plan_open_review_ids",

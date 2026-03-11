@@ -7,9 +7,11 @@ import json
 from pathlib import Path
 
 import desloppify.app.commands.plan.queue_render as queue_render_mod
+import desloppify.app.commands.plan.repair_state as repair_state_mod
 import desloppify.app.commands.plan.triage.workflow as workflow_mod
 from desloppify.app.commands.helpers.runtime import CommandRuntime
 from desloppify.engine._state.persistence import load_state
+from desloppify.engine._state.schema import empty_state
 
 
 def test_load_state_recovers_runtime_state_from_saved_plan(tmp_path: Path) -> None:
@@ -34,7 +36,33 @@ def test_load_state_recovers_runtime_state_from_saved_plan(tmp_path: Path) -> No
     state = load_state(tmp_path / "state-typescript.json")
 
     assert "review::src/foo.ts::abcd1234" in state["issues"]
-    assert state["_saved_plan_recovery"]["mode"] == "queue_only"
+    assert state["scan_metadata"]["source"] == "plan_reconstruction"
+    assert state["scan_metadata"]["reconstructed_issue_count"] == 1
+
+
+def test_load_state_drops_stale_reconstructed_state_without_live_plan(tmp_path: Path) -> None:
+    """Persisted plan-derived state should clear when the live plan disappears."""
+    state = empty_state()
+    state["issues"] = {
+        "review::src/foo.ts::abcd1234": {
+            "id": "review::src/foo.ts::abcd1234",
+            "status": "open",
+            "tier": 2,
+        }
+    }
+    state["scan_metadata"] = {
+        "source": "plan_reconstruction",
+        "inventory_available": True,
+        "metrics_available": False,
+        "plan_queue_available": True,
+        "reconstructed_issue_count": 1,
+    }
+    (tmp_path / "state-typescript.json").write_text(json.dumps(state))
+
+    loaded = load_state(tmp_path / "state-typescript.json")
+
+    assert loaded["issues"] == {}
+    assert loaded["scan_metadata"]["source"] == "empty"
 
 
 def test_cmd_plan_queue_uses_recovered_runtime_state(monkeypatch, capsys) -> None:
@@ -60,7 +88,13 @@ def test_cmd_plan_queue_uses_recovered_runtime_state(monkeypatch, capsys) -> Non
             }
         },
         "last_scan": None,
-        "_saved_plan_recovery": {"active": True, "mode": "queue_only"},
+        "scan_metadata": {
+            "source": "plan_reconstruction",
+            "inventory_available": True,
+            "metrics_available": False,
+            "plan_queue_available": True,
+            "reconstructed_issue_count": 1,
+        },
     }
 
     monkeypatch.setattr(
@@ -82,7 +116,6 @@ def test_cmd_plan_queue_uses_recovered_runtime_state(monkeypatch, capsys) -> Non
     queue_render_mod.cmd_plan_queue(args)
 
     out = capsys.readouterr().out
-    assert "continuing from saved plan metadata only" in out
     assert captured_states
     assert "review::src/foo.ts::abcd1234" in captured_states[0]["issues"]
 
@@ -105,7 +138,13 @@ def test_run_triage_workflow_uses_recovered_runtime_state(monkeypatch, capsys) -
             }
         },
         "last_scan": None,
-        "_saved_plan_recovery": {"active": True, "mode": "queue_only"},
+        "scan_metadata": {
+            "source": "plan_reconstruction",
+            "inventory_available": True,
+            "metrics_available": False,
+            "plan_queue_available": True,
+            "reconstructed_issue_count": 1,
+        },
     }
 
     class _Services:
@@ -142,3 +181,33 @@ def test_run_triage_workflow_uses_recovered_runtime_state(monkeypatch, capsys) -
     assert scan_gate_calls[0] is recovered_state
     assert calls
     assert "review::src/foo.ts::abcd1234" in calls[0]["issues"]
+
+
+def test_cmd_plan_repair_state_rebuilds_persisted_state(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    """Repair command should write canonical reconstructed state to disk."""
+    plan = {
+        "queue_order": ["review::src/foo.ts::abcd1234"],
+        "clusters": {},
+        "epic_triage_meta": {"triage_stages": {"observe": {"report": "done"}}},
+        "skipped": {},
+    }
+    (tmp_path / "plan.json").write_text(json.dumps(plan))
+
+    runtime = CommandRuntime(
+        config={},
+        state=empty_state(),
+        state_path=tmp_path / "state-typescript.json",
+    )
+    monkeypatch.setattr(repair_state_mod, "command_runtime", lambda _args: runtime)
+
+    repair_state_mod.cmd_plan_repair_state(argparse.Namespace())
+
+    repaired = json.loads((tmp_path / "state-typescript.json").read_text())
+    assert repaired["scan_metadata"]["source"] == "plan_reconstruction"
+    assert repaired["scan_metadata"]["reconstructed_issue_count"] == 1
+    assert "review::src/foo.ts::abcd1234" in repaired["issues"]
+    assert "Rebuilt state-typescript.json from plan.json" in capsys.readouterr().out

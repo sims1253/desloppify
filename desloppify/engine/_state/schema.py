@@ -302,18 +302,6 @@ def scan_metadata(state: StateModel | dict[str, Any]) -> ScanMetadataModel:
             "inventory_available": True,
             "metrics_available": True,
         }
-    marker = state.get("_saved_plan_recovery")
-    if isinstance(marker, dict) and marker.get("active"):
-        issue_count = marker.get("reconstructed_issue_count", 0)
-        if not isinstance(issue_count, int) or isinstance(issue_count, bool) or issue_count < 0:
-            issue_count = 0
-        return {
-            "source": "plan_reconstruction",
-            "inventory_available": True,
-            "metrics_available": False,
-            "plan_queue_available": True,
-            "reconstructed_issue_count": issue_count,
-        }
     return empty_state()["scan_metadata"]
 
 

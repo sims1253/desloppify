@@ -9,7 +9,6 @@ from desloppify.base.output.terminal import colorize
 from desloppify.base.discovery.paths import get_project_root
 from desloppify.engine._state.recovery import (
     has_saved_plan_without_scan,
-    is_saved_plan_recovery_state,
     recover_state_from_saved_plan,
     saved_plan_review_ids,
 )
@@ -62,8 +61,6 @@ def state_path(args: argparse.Namespace) -> Path | None:
 
 def require_issue_inventory(state: dict) -> bool:
     """Return True when command consumers can rely on the issue inventory."""
-    if bool(state.get("last_scan")) or is_saved_plan_recovery_state(state):
-        return True
     if not scan_inventory_available(state):
         print(colorize("No scans yet. Run: desloppify scan", "yellow"))
         return False
@@ -71,22 +68,12 @@ def require_issue_inventory(state: dict) -> bool:
 
 
 def require_completed_scan(state: dict) -> bool:
-    """Return True when the state contains at least one completed scan."""
-    has_completed_scan = bool(state.get("last_scan")) or is_saved_plan_recovery_state(state)
-    if not has_completed_scan and not scan_inventory_available(state):
-        print(colorize("No scans yet. Run: desloppify scan", "yellow"))
-        return False
-    if not state.get("last_scan") and (
-        is_saved_plan_recovery_state(state) or scan_inventory_available(state)
-    ):
-        print(colorize("No scan state found; continuing from saved plan metadata only.", "yellow"))
-    return True
+    """Backward-compatible alias for inventory-backed command gating."""
+    return require_issue_inventory(state)
 
 
 def require_scan_metrics(state: dict) -> bool:
     """Return True when real scan-derived metrics are available."""
-    if bool(state.get("last_scan")):
-        return True
     if not scan_metrics_available(state):
         print(colorize("No completed scan metrics yet. Run: desloppify scan", "yellow"))
         return False

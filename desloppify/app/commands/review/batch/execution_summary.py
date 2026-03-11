@@ -16,7 +16,7 @@ class RunSummaryWriter(Protocol):
         *,
         successful_batches: list[int],
         failed_batches: list[int],
-        interrupted: bool,
+        interrupted: bool = False,
         interruption_reason: str | None = None,
     ) -> None: ...
 
@@ -37,7 +37,7 @@ def build_run_summary_writer(
         *,
         successful_batches: list[int],
         failed_batches: list[int],
-        interrupted: bool,
+        interrupted: bool = False,
         interruption_reason: str | None = None,
     ) -> None:
         _write_run_summary_impl(

@@ -229,6 +229,21 @@ def test_require_completed_scan_none_last_scan(capsys):
     assert require_completed_scan({"last_scan": None}) is False
 
 
+def test_require_completed_scan_with_plan_reconstructed_inventory():
+    """Plan-reconstructed state should satisfy inventory-backed command gating."""
+    assert require_completed_scan(
+        {
+            "last_scan": None,
+            "scan_metadata": {
+                "source": "plan_reconstruction",
+                "inventory_available": True,
+                "metrics_available": False,
+                "reconstructed_issue_count": 1,
+            },
+        }
+    ) is True
+
+
 def test_has_saved_plan_without_scan_detects_live_plan():
     """Saved queue/triage metadata should unblock recovery mode."""
     plan = {
