@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Literal
 
 from .enrich_checks import (
-    _manual_clusters_with_issues,
     _steps_missing_issue_refs,
     _steps_referencing_skipped_issues,
     _steps_with_bad_paths,
@@ -73,17 +72,31 @@ def _append_issue(
     )
 
 
-def _filter_plan_to_triage_clusters(plan: dict, triage_issue_ids: set[str]) -> dict:
-    """Return a plan copy with clusters filtered to only those containing triage issue IDs."""
-    filtered = dict(plan)
-    original_clusters = plan.get("clusters", {})
-    filtered_clusters = {}
-    for name, cluster in original_clusters.items():
-        cids = cluster_issue_ids(cluster)
-        if not cids or cids & triage_issue_ids:
-            filtered_clusters[name] = cluster
-    filtered["clusters"] = filtered_clusters
-    return filtered
+def _active_cluster_names(plan: dict, triage_issue_ids: set[str]) -> set[str]:
+    """Return cluster names that overlap with the current triage cycle's issue IDs."""
+    return {
+        name
+        for name, cluster in plan.get("clusters", {}).items()
+        if not cluster_issue_ids(cluster) or cluster_issue_ids(cluster) & triage_issue_ids
+    }
+
+
+def _scoped_plan(plan: dict, triage_issue_ids: set[str] | None) -> dict:
+    """Narrow plan to only clusters relevant to the current triage cycle.
+
+    Returns the original plan unchanged when no triage scoping is needed.
+    """
+    if not triage_issue_ids:
+        return plan
+    active = _active_cluster_names(plan, triage_issue_ids)
+    return {
+        **plan,
+        "clusters": {
+            name: cluster
+            for name, cluster in plan.get("clusters", {}).items()
+            if name in active
+        },
+    }
 
 
 def evaluate_enrich_quality(
@@ -99,8 +112,7 @@ def evaluate_enrich_quality(
     triage_issue_ids: set[str] | None = None,
 ) -> EnrichQualityReport:
     """Evaluate executor-readiness checks for enrich-level stage data."""
-    if triage_issue_ids:
-        plan = _filter_plan_to_triage_clusters(plan, triage_issue_ids)
+    plan = _scoped_plan(plan, triage_issue_ids)
 
     failures: list[EnrichQualityIssue] = []
     warnings: list[EnrichQualityIssue] = []

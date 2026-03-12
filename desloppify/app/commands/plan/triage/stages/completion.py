@@ -28,6 +28,7 @@ from ..validation.core import (
 from ..validation.completion_stages import (
     _auto_confirm_stage_for_complete,
 )
+from ..validation.enrich_checks import _underspecified_steps
 from ..helpers import (
     apply_completion,
     has_triage_in_queue,
@@ -170,42 +171,35 @@ def _cmd_triage_complete(
     state = resolved_services.command_runtime(args).state
     review_ids = open_review_ids_from_state(state)
 
-    completion_stage_checks = (
-        (
-            _require_organize_stage_for_complete,
-            lambda: _auto_confirm_stage_for_complete(
-                plan=plan,
-                stages=stages,
-                stage="organize",
-                attestation=attestation,
-                save_plan_fn=resolved_services.save_plan,
-            ),
-        ),
-        (
-            _require_enrich_stage_for_complete,
-            lambda: _auto_confirm_enrich_for_complete(
-                plan=plan,
-                stages=stages,
-                attestation=attestation,
-                save_plan_fn=resolved_services.save_plan,
-            ),
-        ),
-        (
-            _require_sense_check_stage_for_complete,
-            lambda: _auto_confirm_stage_for_complete(
-                plan=plan,
-                stages=stages,
-                stage="sense-check",
-                attestation=attestation,
-                save_plan_fn=resolved_services.save_plan,
-            ),
-        ),
-    )
-    for require_stage, confirm_stage in completion_stage_checks:
-        if not require_stage(plan=plan, meta=meta, stages=stages):
-            return
-        if not confirm_stage():
-            return
+    # Organize gate
+    if not _require_organize_stage_for_complete(plan=plan, meta=meta, stages=stages):
+        return
+    if not _auto_confirm_stage_for_complete(
+        plan=plan, stages=stages, stage="organize",
+        attestation=attestation, save_plan_fn=resolved_services.save_plan,
+    ):
+        return
+
+    # Enrich gate — compute underspecified steps once, share across require + confirm
+    underspec = _underspecified_steps(plan)
+    if not _require_enrich_stage_for_complete(
+        plan=plan, meta=meta, stages=stages, underspec=underspec,
+    ):
+        return
+    if not _auto_confirm_enrich_for_complete(
+        plan=plan, stages=stages, attestation=attestation,
+        save_plan_fn=resolved_services.save_plan, underspec=underspec,
+    ):
+        return
+
+    # Sense-check gate
+    if not _require_sense_check_stage_for_complete(plan=plan, meta=meta, stages=stages):
+        return
+    if not _auto_confirm_stage_for_complete(
+        plan=plan, stages=stages, stage="sense-check",
+        attestation=attestation, save_plan_fn=resolved_services.save_plan,
+    ):
+        return
 
     if not _completion_clusters_valid(plan, state):
         _record_incomplete_recovery(

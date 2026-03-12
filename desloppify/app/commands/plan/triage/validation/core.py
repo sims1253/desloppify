@@ -316,14 +316,25 @@ def _build_actual_disposition_index(plan: dict) -> dict[str, ActualDisposition]:
 # Coverage Ledger parsing — shared infrastructure
 # ---------------------------------------------------------------------------
 
-def _build_id_resolution_maps(
-    valid_ids: set[str],
-) -> tuple[dict[str, list[str]], dict[str, str]]:
-    """Build short-ID lookup structures from a set of full issue IDs."""
+@dataclass(frozen=True)
+class _IdResolutionMaps:
+    """Pre-built lookup structures for resolving ledger tokens to issue IDs."""
+
+    short_id_buckets: dict[str, list[str]]
+    short_hex_map: dict[str, str]
+    slug_prefix_map: dict[str, str]  # "detector_slug" -> full ID (unambiguous only)
+
+
+def _build_id_resolution_maps(valid_ids: set[str]) -> _IdResolutionMaps:
+    """Build all lookup structures from a set of full issue IDs."""
     short_id_buckets: dict[str, list[str]] = {}
     short_hex_map: dict[str, str] = {}
+    slug_prefix_map: dict[str, str] = {}
+    ambiguous_slugs: set[str] = set()
     for issue_id in sorted(valid_ids):
-        short_id = issue_id.rsplit("::", 1)[-1]
+        parts = issue_id.rsplit("::", 1)
+        short_id = parts[-1]
+        slug = parts[0] if len(parts) == 2 else ""
         short_id_buckets.setdefault(short_id, []).append(issue_id)
         if re.fullmatch(r"[0-9a-f]{8,}", short_id):
             existing = short_hex_map.get(short_id)
@@ -331,7 +342,19 @@ def _build_id_resolution_maps(
                 short_hex_map[short_id] = issue_id
             elif existing != issue_id:
                 short_hex_map.pop(short_id, None)
-    return short_id_buckets, short_hex_map
+        if slug:
+            if slug in ambiguous_slugs:
+                pass
+            elif slug in slug_prefix_map:
+                slug_prefix_map.pop(slug)
+                ambiguous_slugs.add(slug)
+            else:
+                slug_prefix_map[slug] = issue_id
+    return _IdResolutionMaps(
+        short_id_buckets=short_id_buckets,
+        short_hex_map=short_hex_map,
+        slug_prefix_map=slug_prefix_map,
+    )
 
 
 def _clean_ledger_token(raw: str) -> str:
@@ -399,14 +422,13 @@ def _extract_ledger_entry(line: str) -> tuple[str, str | None, str | None]:
 def _resolve_token_to_id(
     token: str,
     valid_ids: set[str],
-    short_id_buckets: dict[str, list[str]],
-    short_hex_map: dict[str, str],
+    maps: _IdResolutionMaps,
     short_id_usage: Counter[str],
 ) -> str | None:
     """Resolve a ledger token to a full issue ID, or None."""
     if token in valid_ids:
         return token
-    bucket = short_id_buckets.get(token)
+    bucket = maps.short_id_buckets.get(token)
     if bucket:
         bucket_index = short_id_usage[token]
         issue_id = bucket[bucket_index] if bucket_index < len(bucket) else bucket[-1]
@@ -414,19 +436,13 @@ def _resolve_token_to_id(
         return issue_id
     # Hex-substring fallback
     for hex_token in re.findall(r"[0-9a-f]{8,}", token):
-        resolved = short_hex_map.get(hex_token)
+        resolved = maps.short_hex_map.get(hex_token)
         if resolved:
             return resolved
-    # Slug-prefix match: token might be the detector_slug part of "detector_slug::hash"
-    token_lower = token.lower()
-    matches = [vid for vid in valid_ids if vid.startswith(token_lower + "::")]
-    if len(matches) == 1:
-        return matches[0]
-    # Substring match: token appears as a component of exactly one issue ID
-    if len(token) >= 6:
-        matches = [vid for vid in valid_ids if token_lower in vid.lower()]
-        if len(matches) == 1:
-            return matches[0]
+    # Slug-prefix match: token is the detector_slug part of "slug::hash"
+    slug_match = maps.slug_prefix_map.get(token.lower())
+    if slug_match:
+        return slug_match
     return None
 
 
@@ -467,7 +483,7 @@ def _walk_coverage_ledger(
     Extracts both hit counts (for accounting validation) and structured
     dispositions (for the execution contract) in one walk.
     """
-    short_id_buckets, short_hex_map = _build_id_resolution_maps(valid_ids)
+    maps = _build_id_resolution_maps(valid_ids)
     hits: Counter[str] = Counter()
     dispositions: list[dict] = []
     short_id_usage: Counter[str] = Counter()
@@ -490,12 +506,12 @@ def _walk_coverage_ledger(
             continue
 
         issue_id = _resolve_token_to_id(
-            token, valid_ids, short_id_buckets, short_hex_map, short_id_usage,
+            token, valid_ids, maps, short_id_usage,
         )
         if not issue_id:
             # Last resort: scan entire line for hex IDs
             for hex_token in re.findall(r"[0-9a-f]{8,}", line):
-                resolved = short_hex_map.get(hex_token)
+                resolved = maps.short_hex_map.get(hex_token)
                 if resolved:
                     issue_id = resolved
                     break
@@ -550,7 +566,7 @@ def _analyze_reflect_issue_accounting(
         return cited, missing, duplicates
 
     # Fallback for reports without a Coverage Ledger section
-    short_id_buckets, short_hex_map = _build_id_resolution_maps(valid_ids)
+    maps = _build_id_resolution_maps(valid_ids)
     cited = extract_issue_citations(report, valid_ids)
     for issue_id in valid_ids:
         if issue_id in report:
@@ -558,7 +574,7 @@ def _analyze_reflect_issue_accounting(
     # Merge hex-suffix matches into cited (previously only used for duplicates)
     short_hits: Counter[str] = Counter()
     for token in re.findall(r"[0-9a-f]{8,}", report):
-        resolved = short_hex_map.get(token)
+        resolved = maps.short_hex_map.get(token)
         if resolved:
             cited.add(resolved)
             short_hits[resolved] += 1
