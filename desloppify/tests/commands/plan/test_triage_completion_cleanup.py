@@ -14,8 +14,12 @@ from desloppify.engine._plan.constants import (
     WORKFLOW_CREATE_PLAN_ID,
     WORKFLOW_SCORE_CHECKPOINT_ID,
 )
-from desloppify.engine._plan.schema import empty_plan
 from desloppify.engine._plan.policy.stale import is_triage_stale
+from desloppify.engine._plan.schema import empty_plan
+from desloppify.engine._work_queue.snapshot import (
+    PHASE_REVIEW_POSTFLIGHT,
+    build_queue_snapshot,
+)
 
 
 def _state_with_review_issues(*ids: str) -> dict:
@@ -30,7 +34,12 @@ def _state_with_review_issues(*ids: str) -> dict:
             "tier": 2,
             "detail": {"dimension": "abstraction_fitness"},
         }
-    return {"issues": issues, "scan_count": 5, "dimension_scores": {}}
+    return {
+        "issues": issues,
+        "scan_count": 5,
+        "last_scan": "2026-01-01T00:00:00+00:00",
+        "dimension_scores": {},
+    }
 
 
 def _plan_with_triage_and_workflow(*review_ids: str) -> dict:
@@ -208,6 +217,32 @@ class TestApplyCompletionClearsTriageState:
         assert "completed_at" in last
         assert "stages" in last
         assert "observe" in last["stages"]
+
+    def test_completion_restores_postflight_scan_marker_for_current_scan(self):
+        """Completing triage should not bounce the queue back to workflow::run-scan."""
+        state = _state_with_review_issues("r1", "r2")
+        plan = _plan_with_triage_and_workflow("r1", "r2")
+        services = _make_services(state)
+        args = argparse.Namespace()
+
+        apply_completion(args, plan, "Test strategy", services=services)
+
+        assert plan["refresh_state"]["postflight_scan_completed_at_scan_count"] == 5
+        snapshot = build_queue_snapshot(state, plan=plan)
+        assert snapshot.phase == PHASE_REVIEW_POSTFLIGHT
+        assert [item["id"] for item in snapshot.execution_items] == ["r1", "r2"]
+
+    def test_completion_does_not_forge_scan_marker_without_scan_history(self):
+        """Plans loaded without a scan should still require an actual scan."""
+        state = _state_with_review_issues("r1")
+        state.pop("last_scan", None)
+        plan = _plan_with_triage_and_workflow("r1")
+        services = _make_services(state)
+        args = argparse.Namespace()
+
+        apply_completion(args, plan, "Test strategy", services=services)
+
+        assert "postflight_scan_completed_at_scan_count" not in plan.get("refresh_state", {})
 
     def test_confirm_existing_rewrites_strategy_summary_to_explicit_reuse_message(self, capsys):
         """Confirm-existing completion should not leave the stale prior strategy summary in place."""

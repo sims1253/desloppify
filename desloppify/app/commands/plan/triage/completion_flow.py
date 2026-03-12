@@ -12,6 +12,7 @@ from desloppify.engine._plan.constants import (
     WORKFLOW_SCORE_CHECKPOINT_ID,
 )
 from desloppify.engine._plan.policy.stale import review_issue_snapshot_hash
+from desloppify.engine._plan.refresh_lifecycle import mark_postflight_scan_completed
 from desloppify.engine.plan_ops import purge_ids
 from desloppify.engine.plan_state import Cluster, PlanModel
 from desloppify.engine.plan_triage import TRIAGE_IDS
@@ -152,6 +153,27 @@ def _print_completion_summary(
     print(colorize("  Run `desloppify next` to start implementation.", "green"))
 
 
+def _restore_postflight_scan_completion_for_current_scan(
+    *,
+    plan: PlanModel,
+    state: StateModel,
+) -> None:
+    """Keep triage completion on the current scan boundary.
+
+    Organize/enrich can legitimately use plan skip commands on live review IDs.
+    Those commands clear the postflight-scan marker because they mutate queue
+    coverage for real issues. Triage completion is still operating on the same
+    scan snapshot, so leaving the marker cleared incorrectly bounces `next`
+    back to `workflow::run-scan` instead of the freshly triaged review work.
+    """
+    if not state.get("last_scan"):
+        return
+    mark_postflight_scan_completed(
+        plan,
+        scan_count=int(state.get("scan_count", 0) or 0),
+    )
+
+
 def apply_completion(
     args: argparse.Namespace,
     plan: PlanModel,
@@ -190,6 +212,10 @@ def apply_completion(
         existing_strategy=existing_strategy,
         completion_mode=completion_mode,
         completion_note=completion_note,
+    )
+    _restore_postflight_scan_completion_for_current_scan(
+        plan=plan,
+        state=state,
     )
     resolved_services.save_plan(plan)
     _print_completion_summary(
