@@ -1,22 +1,8 @@
-"""Confirmation handlers for triage stages."""
+"""Confirmation package for triage stages.
 
-from .basic import (
-    MIN_ATTESTATION_LEN,
-    confirm_observe,
-    confirm_reflect,
-    validate_attestation,
-)
-from .enrich import confirm_enrich, confirm_sense_check
-from .organize import confirm_organize
-from .router import cmd_confirm_stage
+Import concrete confirmation modules directly from this package. Avoid eager
+package-level re-exports so validation helpers can depend on confirmation
+primitives without loading the full confirmation tree during import.
+"""
 
-__all__ = [
-    "MIN_ATTESTATION_LEN",
-    "cmd_confirm_stage",
-    "confirm_enrich",
-    "confirm_observe",
-    "confirm_organize",
-    "confirm_reflect",
-    "confirm_sense_check",
-    "validate_attestation",
-]
+__all__: list[str] = []

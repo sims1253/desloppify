@@ -401,6 +401,37 @@ def _execute_parallel_stage(
     )
 
 
+def _failure_result(
+    *,
+    stage: str,
+    elapsed: int | None,
+    error: str,
+    append_run_log: Callable[[str], None] | None = None,
+    log_event: str = "stage-failed",
+    log_reason: str | None = None,
+    printed_message: str | None = None,
+) -> StageExecutionResult:
+    if printed_message is not None:
+        print(colorize(printed_message, "red"))
+    if append_run_log is not None:
+        log_parts = [f"{log_event} stage={stage}"]
+        if elapsed is not None:
+            log_parts.append(f"elapsed={elapsed}s")
+        log_parts.append(f"reason={log_reason or error}")
+        append_run_log(" ".join(log_parts))
+    payload: dict[str, Any] = {
+        "status": "failed",
+        "error": error,
+    }
+    if elapsed is not None:
+        payload["elapsed_seconds"] = elapsed
+    return StageExecutionResult(
+        status="failed",
+        payload=payload,
+        elapsed_seconds=elapsed,
+    )
+
+
 def _build_subprocess_prompt(
     *,
     context: StageRunContext,
@@ -492,6 +523,16 @@ def _run_subprocess_stage(
     )
 
 
+def _resolve_subprocess_artifacts(
+    subprocess_result: StageExecutionResult,
+) -> tuple[Path, int] | None:
+    output_file = subprocess_result.output_file
+    elapsed = subprocess_result.elapsed_seconds
+    if output_file is None or elapsed is None:
+        return None
+    return output_file, elapsed
+
+
 def _record_stage_report_if_needed(
     *,
     context: StageRunContext,
@@ -508,18 +549,12 @@ def _record_stage_report_if_needed(
 
     report = dependencies.read_stage_output(output_file)
     if not report:
-        print(colorize(f"  Stage {stage}: output file was empty after subprocess.", "red"))
-        context.append_run_log(
-            f"stage-failed stage={stage} elapsed={elapsed}s reason=empty_stage_output"
-        )
-        return StageExecutionResult(
-            status="failed",
-            payload={
-                "status": "failed",
-                "elapsed_seconds": elapsed,
-                "error": "empty_stage_output",
-            },
-            elapsed_seconds=elapsed,
+        return _failure_result(
+            stage=stage,
+            elapsed=elapsed,
+            error="empty_stage_output",
+            append_run_log=context.append_run_log,
+            printed_message=f"  Stage {stage}: output file was empty after subprocess.",
         )
 
     if stage == "reflect":
@@ -538,63 +573,79 @@ def _record_stage_report_if_needed(
             stages_data=stages_data,
         )
         if repair_error:
-            print(
-                colorize(
-                    f"  Stage {stage}: repair failed ({repair_error}).",
-                    "red",
-                )
-            )
-            context.append_run_log(
-                f"stage-failed stage={stage} elapsed={elapsed}s reason={repair_error}"
-            )
-            return StageExecutionResult(
-                status="failed",
-                payload={
-                    "status": "failed",
-                    "elapsed_seconds": elapsed,
-                    "error": repair_error,
-                },
-                elapsed_seconds=elapsed,
+            return _failure_result(
+                stage=stage,
+                elapsed=elapsed,
+                error=repair_error,
+                append_run_log=context.append_run_log,
+                printed_message=f"  Stage {stage}: repair failed ({repair_error}).",
             )
         if not report:
-            context.append_run_log(
-                f"stage-failed stage={stage} elapsed={elapsed}s reason=reflect_repair_no_report"
-            )
-            return StageExecutionResult(
-                status="failed",
-                payload={
-                    "status": "failed",
-                    "elapsed_seconds": elapsed,
-                    "error": "reflect_repair_no_report",
-                },
-                elapsed_seconds=elapsed,
+            return _failure_result(
+                stage=stage,
+                elapsed=elapsed,
+                error="reflect_repair_no_report",
+                append_run_log=context.append_run_log,
             )
 
     handler.record_report(report, context.args, context.services)
     plan_after_record = context.services.load_plan()
     if not stage_report_recorded(plan_after_record, stage):
-        print(
-            colorize(
-                f"  Stage {stage}: handler completed but did not persist the stage.",
-                "red",
-            )
-        )
-        context.append_run_log(
-            f"stage-record-failed stage={stage} elapsed={elapsed}s reason=stage_not_recorded"
-        )
-        return StageExecutionResult(
-            status="failed",
-            payload={
-                "status": "failed",
-                "elapsed_seconds": elapsed,
-                "error": "stage_not_recorded",
-            },
-            elapsed_seconds=elapsed,
+        return _failure_result(
+            stage=stage,
+            elapsed=elapsed,
+            error="stage_not_recorded",
+            append_run_log=context.append_run_log,
+            log_event="stage-record-failed",
+            printed_message=f"  Stage {stage}: handler completed but did not persist the stage.",
         )
     context.append_run_log(
         f"stage-recorded stage={stage} elapsed={elapsed}s mode=orchestrator"
     )
     return StageExecutionResult(status="ready", payload={})
+
+
+def _run_stage_subprocess_path(
+    *,
+    context: StageRunContext,
+    stage: str,
+    handler: StageHandler | None,
+    prompt_mode: PromptMode,
+    dependencies: StageExecutionDependencies,
+) -> StageExecutionResult:
+    prompt, stages_data = _build_subprocess_prompt(
+        context=context,
+        stage=stage,
+        prompt_mode=prompt_mode,
+        dependencies=dependencies,
+    )
+    subprocess_result = _run_subprocess_stage(
+        context=context,
+        stage=stage,
+        prompt=prompt,
+        dependencies=dependencies,
+    )
+    if subprocess_result.status != "ready":
+        return subprocess_result
+
+    subprocess_artifacts = _resolve_subprocess_artifacts(subprocess_result)
+    if subprocess_artifacts is None:
+        return _failure_result(
+            stage=stage,
+            elapsed=None,
+            error="subprocess_output_missing",
+        )
+    output_file, elapsed = subprocess_artifacts
+
+    return _record_stage_report_if_needed(
+        context=context,
+        stage=stage,
+        handler=handler,
+        dependencies=dependencies,
+        output_file=output_file,
+        elapsed=elapsed,
+        stages_data=stages_data,
+    )
 
 
 def execute_stage(
@@ -618,20 +669,11 @@ def execute_stage(
     )
     if not preflight_ok:
         elapsed = int(time.monotonic() - context.stage_start)
-        print(
-            colorize(
-                f"  Stage {stage}: blocked before launch ({preflight_reason}).",
-                "red",
-            )
-        )
-        return StageExecutionResult(
-            status="failed",
-            payload={
-                "status": "failed",
-                "elapsed_seconds": elapsed,
-                "error": preflight_reason,
-            },
-            elapsed_seconds=elapsed,
+        return _failure_result(
+            stage=stage,
+            elapsed=elapsed,
+            error=preflight_reason or "stage_preflight_failed",
+            printed_message=f"  Stage {stage}: blocked before launch ({preflight_reason}).",
         )
 
     parallel_result = _execute_parallel_stage(
@@ -643,46 +685,13 @@ def execute_stage(
         return parallel_result
     if parallel_result.used_parallel:
         return StageExecutionResult(status="ready", payload={})
-
-    prompt, stages_data = _build_subprocess_prompt(
-        context=context,
-        stage=stage,
-        prompt_mode=prompt_mode,
-        dependencies=dependencies,
-    )
-    subprocess_result = _run_subprocess_stage(
-        context=context,
-        stage=stage,
-        prompt=prompt,
-        dependencies=dependencies,
-    )
-    if subprocess_result.status != "ready":
-        return subprocess_result
-
-    output_file = subprocess_result.output_file
-    elapsed = subprocess_result.elapsed_seconds
-    if output_file is None or elapsed is None:
-        return StageExecutionResult(
-            status="failed",
-            payload={
-                "status": "failed",
-                "error": "subprocess_output_missing",
-            },
-        )
-
-    record_result = _record_stage_report_if_needed(
+    return _run_stage_subprocess_path(
         context=context,
         stage=stage,
         handler=handler,
+        prompt_mode=prompt_mode,
         dependencies=dependencies,
-        output_file=output_file,
-        elapsed=elapsed,
-        stages_data=stages_data,
     )
-    if record_result.status != "ready":
-        return record_result
-
-    return StageExecutionResult(status="ready", payload={})
 
 
 __all__ = [

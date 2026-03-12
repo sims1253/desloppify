@@ -4,7 +4,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from desloppify.app.commands.helpers.runtime import command_runtime
 from desloppify.base.output.terminal import colorize
+from desloppify.engine.plan_state import save_plan
+from desloppify.engine.plan_triage import collect_triage_input, detect_recurring_patterns
+from desloppify.state_io import utc_now
 
 from ..helpers import (
     cluster_issue_ids,
@@ -62,11 +66,57 @@ from .stage_policy import (
 
 _missing_stage_prerequisite = missing_stage_prerequisite
 require_stage_prerequisite = require_prerequisite
-_auto_confirm_stage = confirm_stage
-_auto_confirm_observe_if_attested = auto_confirm_observe_if_attested
-_auto_confirm_reflect_for_organize = auto_confirm_reflect_for_organize
 _analyze_reflect_issue_accounting = analyze_reflect_issue_accounting
 _validate_reflect_issue_accounting = validate_reflect_accounting
+
+
+def _auto_confirm_stage(*args, **kwargs):
+    return confirm_stage(*args, **kwargs)
+
+
+def _auto_confirm_observe_if_attested(
+    *,
+    plan: dict,
+    stages: dict,
+    attestation: str | None,
+    triage_input,
+) -> bool:
+    return auto_confirm_observe_if_attested(
+        plan=plan,
+        stages=stages,
+        attestation=attestation,
+        triage_input=triage_input,
+        save_plan_fn=save_plan,
+        utc_now_fn=utc_now,
+    )
+
+
+def _auto_confirm_reflect_for_organize(
+    *,
+    args,
+    plan: dict,
+    stages: dict,
+    attestation: str | None,
+    deps: ReflectAutoConfirmDeps | None = None,
+) -> bool:
+    resolved_deps = deps or ReflectAutoConfirmDeps()
+    wrapped_deps = ReflectAutoConfirmDeps(
+        triage_input=resolved_deps.triage_input,
+        command_runtime_fn=resolved_deps.command_runtime_fn or command_runtime,
+        collect_triage_input_fn=resolved_deps.collect_triage_input_fn or collect_triage_input,
+        detect_recurring_patterns_fn=(
+            resolved_deps.detect_recurring_patterns_fn or detect_recurring_patterns
+        ),
+        save_plan_fn=resolved_deps.save_plan_fn or save_plan,
+    )
+    return auto_confirm_reflect_for_organize(
+        args=args,
+        plan=plan,
+        stages=stages,
+        attestation=attestation,
+        deps=wrapped_deps,
+        utc_now_fn=utc_now,
+    )
 
 
 def _validate_recurring_dimension_mentions(

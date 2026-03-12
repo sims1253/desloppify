@@ -224,38 +224,47 @@ def _apply_step_mutations(
 ) -> bool:
     if request.add_step is not None:
         _apply_add_step(current_steps=current_steps, request=request, colorize_fn=services.colorize_fn)
+    return (
+        _run_optional_step_mutation(
+            request.update_step is not None,
+            lambda: _apply_update_step(
+                current_steps=current_steps,
+                request=request,
+                colorize_fn=services.colorize_fn,
+            ),
+        )
+        and _run_optional_step_mutation(
+            request.remove_step is not None,
+            lambda: _apply_remove_step(
+                current_steps=current_steps,
+                step_summary_fn=services.step_summary_fn,
+                step_number=request.remove_step or 0,
+                colorize_fn=services.colorize_fn,
+            ),
+        )
+        and _run_optional_step_mutation(
+            request.done_step is not None,
+            lambda: _apply_done_toggle(
+                current_steps=current_steps,
+                step_number=request.done_step or 0,
+                done=True,
+                colorize_fn=services.colorize_fn,
+            ),
+        )
+        and _run_optional_step_mutation(
+            request.undone_step is not None,
+            lambda: _apply_done_toggle(
+                current_steps=current_steps,
+                step_number=request.undone_step or 0,
+                done=False,
+                colorize_fn=services.colorize_fn,
+            ),
+        )
+    )
 
-    if request.update_step is not None and not _apply_update_step(
-        current_steps=current_steps,
-        request=request,
-        colorize_fn=services.colorize_fn,
-    ):
-        return False
 
-    if request.remove_step is not None and not _apply_remove_step(
-        current_steps=current_steps,
-        step_summary_fn=services.step_summary_fn,
-        step_number=request.remove_step,
-        colorize_fn=services.colorize_fn,
-    ):
-        return False
-
-    if request.done_step is not None and not _apply_done_toggle(
-        current_steps=current_steps,
-        step_number=request.done_step,
-        done=True,
-        colorize_fn=services.colorize_fn,
-    ):
-        return False
-
-    if request.undone_step is not None and not _apply_done_toggle(
-        current_steps=current_steps,
-        step_number=request.undone_step,
-        done=False,
-        colorize_fn=services.colorize_fn,
-    ):
-        return False
-    return True
+def _run_optional_step_mutation(enabled: bool, apply_change: Callable[[], bool]) -> bool:
+    return not enabled or apply_change()
 
 
 def _apply_add_step(
@@ -285,9 +294,12 @@ def _apply_update_step(
     colorize_fn: ColorizeFn,
 ) -> bool:
     step_number = int(request.update_step or 0)
-    idx = step_number - 1
-    if idx < 0 or idx >= len(current_steps):
-        print(colorize_fn(f"  Step {step_number} out of range (1-{len(current_steps)}).", "red"))
+    idx = _resolve_step_index(
+        current_steps=current_steps,
+        step_number=step_number,
+        colorize_fn=colorize_fn,
+    )
+    if idx is None:
         return False
 
     updated = dict(current_steps[idx])
@@ -313,9 +325,12 @@ def _apply_remove_step(
     step_number: int,
     colorize_fn: ColorizeFn,
 ) -> bool:
-    idx = step_number - 1
-    if idx < 0 or idx >= len(current_steps):
-        print(colorize_fn(f"  Step {step_number} out of range (1-{len(current_steps)}).", "red"))
+    idx = _resolve_step_index(
+        current_steps=current_steps,
+        step_number=step_number,
+        colorize_fn=colorize_fn,
+    )
+    if idx is None:
         return False
     removed = current_steps.pop(idx)
     title = step_summary_fn(removed)
@@ -330,9 +345,12 @@ def _apply_done_toggle(
     done: bool,
     colorize_fn: ColorizeFn,
 ) -> bool:
-    idx = step_number - 1
-    if idx < 0 or idx >= len(current_steps):
-        print(colorize_fn(f"  Step {step_number} out of range (1-{len(current_steps)}).", "red"))
+    idx = _resolve_step_index(
+        current_steps=current_steps,
+        step_number=step_number,
+        colorize_fn=colorize_fn,
+    )
+    if idx is None:
         return False
     step = dict(current_steps[idx])
     step["done"] = done
@@ -340,6 +358,19 @@ def _apply_done_toggle(
     state = "done" if done else "not done"
     print(colorize_fn(f"  Marked step {step_number} as {state}.", "dim"))
     return True
+
+
+def _resolve_step_index(
+    *,
+    current_steps: list[ActionStep],
+    step_number: int,
+    colorize_fn: ColorizeFn,
+) -> int | None:
+    idx = step_number - 1
+    if 0 <= idx < len(current_steps):
+        return idx
+    print(colorize_fn(f"  Step {step_number} out of range (1-{len(current_steps)}).", "red"))
+    return None
 
 
 def _print_current_steps(

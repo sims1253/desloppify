@@ -85,38 +85,54 @@ def _clean_ledger_token(raw: str) -> str:
     return token
 
 
-def _extract_ledger_entry(line: str) -> tuple[str, str | None, str | None]:
-    """Parse one ledger line into ``(token, decision, target)``."""
-    match = re.match(r"-\s*(.+?)\s*->\s*(\w+)\s+[\"']([^\"']+)[\"']", line)
-    if match:
-        return _clean_ledger_token(match.group(1)), match.group(2).strip().lower(), match.group(3).strip()
+_CANONICAL_LEDGER_PATTERNS = (
+    re.compile(r"-\s*(.+?)\s*->\s*(\w+)\s+[\"']([^\"']+)[\"']"),
+    re.compile(r"-\s*(.+?)\s*->\s*(\w+)\s+(\S+.*)"),
+)
+_COMPAT_LEDGER_PATTERNS = (
+    re.compile(r"-\s*(.+?)\s*:\s*(\w+)\s+[\"']?([^\"']+?)[\"']?\s*$"),
+    re.compile(r"-\s*([^,]+),\s*(\w+),\s*[\"']?([^\"',]+?)[\"']?\s*$"),
+)
+_TOKEN_ONLY_PATTERNS = (
+    re.compile(r"-\s*(.+?)\s*->"),
+    re.compile(r"-\s+(\S+)\s*$"),
+)
 
-    match = re.match(r"-\s*(.+?)\s*->\s*(\w+)\s+(\S+.*)", line)
-    if match:
-        return (
-            _clean_ledger_token(match.group(1)),
-            match.group(2).strip().lower(),
-            match.group(3).strip().strip("\"'"),
-        )
 
-    match = re.match(r"-\s*(.+?)\s*->", line)
-    if match:
-        return _clean_ledger_token(match.group(1)), None, None
+def _parse_ledger_line_with_patterns(
+    line: str,
+    patterns: tuple[re.Pattern[str], ...],
+) -> tuple[str, str | None, str | None]:
+    for pattern in patterns:
+        match = pattern.match(line)
+        if match:
+            token = _clean_ledger_token(match.group(1))
+            return token, match.group(2).strip().lower(), match.group(3).strip().strip("\"'")
+    return "", None, None
 
-    match = re.match(r"-\s*(.+?)\s*:\s*(\w+)\s+[\"']?([^\"']+?)[\"']?\s*$", line)
-    if match:
-        return _clean_ledger_token(match.group(1)), match.group(2).strip().lower(), match.group(3).strip()
 
-    match = re.match(r"-\s*([^,]+),\s*(\w+),\s*[\"']?([^\"',]+?)[\"']?\s*$", line)
-    if match:
-        return _clean_ledger_token(match.group(1)), match.group(2).strip().lower(), match.group(3).strip()
-
-    match = re.match(r"-\s+(\S+)\s*$", line)
-    if match:
+def _parse_token_only_ledger_line(line: str) -> tuple[str, str | None, str | None]:
+    for pattern in _TOKEN_ONLY_PATTERNS:
+        match = pattern.match(line)
+        if not match:
+            continue
         token = _clean_ledger_token(match.group(1))
         if token:
             return token, None, None
     return "", None, None
+
+
+def _extract_ledger_entry(line: str) -> tuple[str, str | None, str | None]:
+    """Parse one ledger line into ``(token, decision, target)``."""
+    token, decision, target = _parse_ledger_line_with_patterns(line, _CANONICAL_LEDGER_PATTERNS)
+    if token:
+        return token, decision, target
+
+    token, decision, target = _parse_ledger_line_with_patterns(line, _COMPAT_LEDGER_PATTERNS)
+    if token:
+        return token, decision, target
+
+    return _parse_token_only_ledger_line(line)
 
 
 def _resolve_token_to_id(
@@ -162,6 +178,61 @@ class _LedgerParseResult:
     found_section: bool
 
 
+def _iter_coverage_ledger_lines(report: str) -> tuple[bool, list[str]]:
+    found_section = False
+    in_ledger = False
+    lines: list[str] = []
+    for raw_line in report.splitlines():
+        line = raw_line.strip()
+        if re.fullmatch(r"##\s+Coverage Ledger", line, re.IGNORECASE):
+            found_section = True
+            in_ledger = True
+            continue
+        if in_ledger and re.match(r"##\s+", line):
+            break
+        if in_ledger:
+            lines.append(line)
+    return found_section, lines
+
+
+def _resolve_ledger_issue_id(
+    *,
+    token: str,
+    line: str,
+    valid_ids: set[str],
+    maps: _IdResolutionMaps,
+    short_id_usage: Counter[str],
+) -> str | None:
+    issue_id = _resolve_token_to_id(token, valid_ids, maps, short_id_usage)
+    if issue_id:
+        return issue_id
+    for hex_token in re.findall(r"[0-9a-f]{8,}", line):
+        resolved = maps.short_hex_map.get(hex_token)
+        if resolved:
+            return resolved
+    return None
+
+
+def _append_disposition_if_supported(
+    dispositions: list[ReflectDisposition],
+    *,
+    issue_id: str,
+    decision: str | None,
+    target: str | None,
+) -> None:
+    if not decision or not target:
+        return
+    normalized = _normalize_decision(decision)
+    if normalized in {"cluster", "permanent_skip"}:
+        dispositions.append(
+            ReflectDisposition(
+                issue_id=issue_id,
+                decision=normalized,  # type: ignore[arg-type]
+                target=target,
+            )
+        )
+
+
 def _walk_coverage_ledger(
     report: str,
     valid_ids: set[str],
@@ -170,46 +241,29 @@ def _walk_coverage_ledger(
     hits: Counter[str] = Counter()
     dispositions: list[ReflectDisposition] = []
     short_id_usage: Counter[str] = Counter()
-    in_ledger = False
-    found_section = False
+    found_section, ledger_lines = _iter_coverage_ledger_lines(report)
 
-    for raw_line in report.splitlines():
-        line = raw_line.strip()
-        if re.fullmatch(r"##\s+Coverage Ledger", line, re.IGNORECASE):
-            in_ledger = True
-            found_section = True
-            continue
-        if in_ledger and re.match(r"##\s+", line):
-            break
-        if not in_ledger:
-            continue
-
+    for line in ledger_lines:
         token, decision, target = _extract_ledger_entry(line)
         if not token:
             continue
 
-        issue_id = _resolve_token_to_id(token, valid_ids, maps, short_id_usage)
-        if not issue_id:
-            for hex_token in re.findall(r"[0-9a-f]{8,}", line):
-                resolved = maps.short_hex_map.get(hex_token)
-                if resolved:
-                    issue_id = resolved
-                    break
-
+        issue_id = _resolve_ledger_issue_id(
+            token=token,
+            line=line,
+            valid_ids=valid_ids,
+            maps=maps,
+            short_id_usage=short_id_usage,
+        )
         if not issue_id:
             continue
         hits[issue_id] += 1
-        if not decision or not target:
-            continue
-        normalized = _normalize_decision(decision)
-        if normalized in {"cluster", "permanent_skip"}:
-            dispositions.append(
-                ReflectDisposition(
-                    issue_id=issue_id,
-                    decision=normalized,  # type: ignore[arg-type]
-                    target=target,
-                )
-            )
+        _append_disposition_if_supported(
+            dispositions,
+            issue_id=issue_id,
+            decision=decision,
+            target=target,
+        )
 
     return _LedgerParseResult(
         hits=hits,
@@ -245,16 +299,24 @@ def analyze_reflect_issue_accounting(
         if issue_id in report:
             cited.add(issue_id)
 
-    short_hits: Counter[str] = Counter()
-    for token in re.findall(r"[0-9a-f]{8,}", report):
-        resolved = maps.short_hex_map.get(token)
-        if resolved:
-            cited.add(resolved)
-            short_hits[resolved] += 1
+    short_hits = _collect_legacy_short_hex_hits(report, maps)
+    cited.update(short_hits)
 
     duplicates = sorted(issue_id for issue_id, count in short_hits.items() if count > 1)
     missing = sorted(valid_ids - cited)
     return cited, missing, duplicates
+
+
+def _collect_legacy_short_hex_hits(
+    report: str,
+    maps: _IdResolutionMaps,
+) -> Counter[str]:
+    short_hits: Counter[str] = Counter()
+    for token in re.findall(r"[0-9a-f]{8,}", report):
+        resolved = maps.short_hex_map.get(token)
+        if resolved:
+            short_hits[resolved] += 1
+    return short_hits
 
 
 def validate_reflect_accounting(

@@ -117,9 +117,11 @@ def confirm_stage(
     attestation: str | None,
     request: AutoConfirmStageRequest,
     save_plan_fn=None,
+    utc_now_fn=None,
 ) -> bool:
     """Auto-confirm one recorded stage with a validated attestation."""
     resolved_save_plan = save_plan_fn or save_plan
+    resolved_utc_now = utc_now_fn or utc_now
     if stage_record.get("confirmed_at"):
         return True
     if not attestation or len(attestation.strip()) < MIN_ATTESTATION_LEN:
@@ -139,7 +141,7 @@ def confirm_stage(
         print(colorize(f"  {validation_err}", "red"))
         return False
 
-    stage_record["confirmed_at"] = utc_now()
+    stage_record["confirmed_at"] = resolved_utc_now()
     stage_record["confirmed_text"] = confirmed_text
     resolved_save_plan(plan)
     print(colorize(f"  ✓ {request.stage_label} auto-confirmed via --attestation.", "green"))
@@ -153,6 +155,7 @@ def auto_confirm_observe_if_attested(
     attestation: str | None,
     triage_input,
     save_plan_fn=None,
+    utc_now_fn=None,
 ) -> bool:
     """Auto-confirm observe inline when the report already exists."""
     observe_stage = stages.get("observe")
@@ -172,6 +175,7 @@ def auto_confirm_observe_if_attested(
             dimensions=dim_names,
         ),
         save_plan_fn=save_plan_fn,
+        utc_now_fn=utc_now_fn,
     )
 
 
@@ -182,6 +186,7 @@ def auto_confirm_reflect_for_organize(
     stages: dict,
     attestation: str | None,
     deps: ReflectAutoConfirmDeps | None = None,
+    utc_now_fn=None,
 ) -> bool:
     """Auto-confirm reflect after validating its issue accounting."""
     reflect_stage = stages.get("reflect")
@@ -229,6 +234,7 @@ def auto_confirm_reflect_for_organize(
             cluster_names=reflect_clusters,
         ),
         save_plan_fn=resolved_deps.save_plan_fn,
+        utc_now_fn=utc_now_fn,
     )
 
 
