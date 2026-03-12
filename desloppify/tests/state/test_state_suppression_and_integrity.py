@@ -207,3 +207,63 @@ class TestScoreAntiGaming:
         assert st["issues"]["unused::a.py::x"]["suppressed"] is True
         # Suppressed issues are invisible to scoring — score should improve
         assert st["strict_score"] >= strict_before
+
+    def test_resolve_preserves_subjective_integrity_target(self):
+        """resolve_issues() must not erase the subjective integrity target.
+
+        Regression test for bounty S249 (@Tib-Gridello, verified by @xliry):
+        _recompute_stats was called without subjective_integrity_target,
+        silently resetting the anti-gaming protection to disabled.
+        """
+        from desloppify.state import resolve_issues
+
+        st = empty_state()
+        st["subjective_assessments"] = {
+            "naming_quality": {"score": 95},
+        }
+        issue = _make_raw_issue("unused::a.py::x", detector="unused", file="a.py")
+        merge_scan(
+            st,
+            [issue],
+            MergeScanOptions(
+                lang="python",
+                potentials={"unused": 1},
+                force_resolve=True,
+                subjective_integrity_target=95.0,
+            ),
+        )
+        assert st["subjective_integrity"]["target_score"] == 95.0
+
+        resolve_issues(st, "unused::a.py::x", "fixed", note="done")
+        assert st["subjective_integrity"]["target_score"] == 95.0
+        assert st["subjective_integrity"]["status"] != "disabled"
+
+    def test_remove_ignored_preserves_subjective_integrity_target(self):
+        """remove_ignored_issues() must not erase the subjective integrity target.
+
+        Regression test for bounty S249 (@Tib-Gridello, verified by @xliry):
+        _recompute_stats was called without subjective_integrity_target,
+        silently resetting the anti-gaming protection to disabled.
+        """
+        from desloppify.state import remove_ignored_issues
+
+        st = empty_state()
+        st["subjective_assessments"] = {
+            "naming_quality": {"score": 95},
+        }
+        issue = _make_raw_issue("unused::a.py::x", detector="unused", file="a.py")
+        merge_scan(
+            st,
+            [issue],
+            MergeScanOptions(
+                lang="python",
+                potentials={"unused": 1},
+                force_resolve=True,
+                subjective_integrity_target=95.0,
+            ),
+        )
+        assert st["subjective_integrity"]["target_score"] == 95.0
+
+        remove_ignored_issues(st, "unused::*")
+        assert st["subjective_integrity"]["target_score"] == 95.0
+        assert st["subjective_integrity"]["status"] != "disabled"

@@ -35,6 +35,20 @@ from desloppify.engine._state.scope import (
 )
 
 
+def _preserve_integrity_target(state: StateModel) -> float | None:
+    """Extract the current subjective integrity target so recompute doesn't erase it."""
+    integrity = state.get("subjective_integrity")
+    if not isinstance(integrity, dict):
+        return None
+    raw = integrity.get("target_score")
+    if raw is None:
+        return None
+    try:
+        return max(0.0, min(100.0, float(raw)))
+    except (TypeError, ValueError):
+        return None
+
+
 def path_scoped_issues(
     issues: dict[str, Issue],
     scan_path: str | None,
@@ -112,7 +126,11 @@ def remove_ignored_issues(state: StateModel, pattern: str) -> int:
         recompute_stats as _recompute_stats,
     )
 
-    _recompute_stats(state, scan_path=state.get("scan_path"))
+    _recompute_stats(
+        state,
+        scan_path=state.get("scan_path"),
+        subjective_integrity_target=_preserve_integrity_target(state),
+    )
     validate_state_invariants(state)
     return len(matched_ids)
 
