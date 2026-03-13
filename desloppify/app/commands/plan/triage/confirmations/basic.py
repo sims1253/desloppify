@@ -12,8 +12,8 @@ from .shared import (
     ensure_stage_is_confirmable,
     finalize_stage_confirmation,
 )
-from ..observe_batches import observe_dimension_breakdown
 from ..services import TriageServices, default_triage_services
+from ..stages.records import TriageStages
 
 # Observe verdicts that trigger auto-skip on confirmation
 _AUTO_SKIP_VERDICTS = frozenset({"false positive", "exaggerated"})
@@ -186,7 +186,7 @@ def _undo_observe_auto_skips(plan: dict, meta: dict) -> int:
 def confirm_observe(
     args: argparse.Namespace,
     plan: dict,
-    stages: dict,
+    stages: TriageStages,
     attestation: str | None,
     *,
     services: TriageServices | None = None,
@@ -196,17 +196,14 @@ def confirm_observe(
     if not ensure_stage_is_confirmable(stages, stage="observe"):
         return
 
-    runtime = resolved_services.command_runtime(args)
-    si = resolved_services.collect_triage_input(plan, runtime.state)
     obs = stages["observe"]
 
-    print(colorize("  Stage: OBSERVE — Analyse issues & spot contradictions", "bold"))
+    print(colorize("  Stage: OBSERVE — Verify queued issues against the code", "bold"))
     print(colorize("  " + "─" * 54, "dim"))
 
-    by_dim, dim_names = observe_dimension_breakdown(si)
-
-    review_issues = getattr(si, "review_issues", getattr(si, "open_issues", {}))
-    issue_count = obs.get("issue_count", len(review_issues))
+    by_dim = obs.get("dimension_counts", {})
+    dim_names = obs.get("dimension_names", sorted(by_dim))
+    issue_count = int(obs.get("issue_count", 0) or 0)
     print(f"  Your analysis covered {issue_count} issues across {len(by_dim)} dimensions:")
     for dim in dim_names:
         print(f"    {dim}: {by_dim[dim]} issues")
@@ -296,7 +293,8 @@ def confirm_reflect(
             print(colorize("  │ ...", "cyan"))
         print(colorize("  └" + "─" * 51 + "┘", "cyan"))
 
-    _by_dim, observe_dims = observe_dimension_breakdown(si)
+    observe_stage = stages.get("observe", {})
+    observe_dims = list(observe_stage.get("dimension_names", []))
     reflect_dims = sorted(set((list(recurring.keys()) if recurring else []) + observe_dims))
     reflect_clusters = [name for name in plan.get("clusters", {}) if not plan["clusters"][name].get("auto")]
 

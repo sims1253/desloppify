@@ -46,6 +46,9 @@ def _plan_with_stages(*stage_names: str, confirmed: bool = False) -> dict:
             "timestamp": "2025-06-01T00:00:00Z",
             "issue_count": 5,
         }
+        if name == "observe":
+            stages[name]["dimension_names"] = ["naming"]
+            stages[name]["dimension_counts"] = {"naming": 5}
         if confirmed:
             stages[name]["confirmed_at"] = "2025-06-01T00:01:00Z"
             stages[name]["confirmed_text"] = "I have thoroughly reviewed all the issues in this stage"

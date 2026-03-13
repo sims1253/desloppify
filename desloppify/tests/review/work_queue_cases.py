@@ -602,6 +602,48 @@ def test_stale_subjective_appear_when_no_objective_backlog():
     assert "subjective::naming_quality" in ids
 
 
+def test_under_target_subjective_appear_when_no_objective_backlog():
+    """Current below-target dimensions surface alongside stale review work."""
+    state = _state(
+        [],
+        dimension_scores={
+            "Naming quality": {
+                "score": 70.0,
+                "strict": 70.0,
+                "failing": 1,
+                "detectors": {
+                    "subjective_assessment": {"dimension_key": "naming_quality"},
+                },
+            },
+            "Design coherence": {
+                "score": 68.0,
+                "strict": 68.0,
+                "failing": 1,
+                "detectors": {
+                    "subjective_assessment": {"dimension_key": "design_coherence"},
+                },
+                "stale": True,
+            },
+        },
+    )
+    state["subjective_assessments"] = {
+        "naming_quality": {
+            "score": 70.0,
+            "needs_review_refresh": False,
+        },
+        "design_coherence": {
+            "score": 68.0,
+            "needs_review_refresh": True,
+            "stale_since": "2026-01-01T00:00:00+00:00",
+        },
+    }
+
+    queue = build_work_queue(state, count=None, include_subjective=True)
+    ids = {item["id"] for item in queue["items"]}
+
+    assert all(fid.startswith("subjective::") for fid in ids)
+
+
 def test_unassessed_subjective_visible_with_objective_backlog():
     """When initial reviews exist, only they are shown — objective items hidden.
 

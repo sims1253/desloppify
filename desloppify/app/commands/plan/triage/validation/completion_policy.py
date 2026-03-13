@@ -9,10 +9,20 @@ from desloppify.engine.plan_triage import extract_issue_citations
 from ..display.dashboard import show_plan_summary
 from ..review_coverage import (
     cluster_issue_ids,
-    manual_clusters_with_issues,
     open_review_ids_from_state,
 )
-from ..stages.helpers import unclustered_review_issues, unenriched_clusters
+from ..stages.helpers import (
+    active_triage_issue_scope,
+    scoped_manual_clusters_with_issues,
+    unclustered_review_issues,
+    unenriched_clusters,
+)
+from .completion_stages import (
+    _auto_confirm_enrich_for_complete,
+    _require_enrich_stage_for_complete,
+    _require_organize_stage_for_complete,
+    _require_sense_check_stage_for_complete,
+)
 
 
 def _resolve_strategy_input(
@@ -59,10 +69,14 @@ def _strategy_valid_or_error(
 
 
 def _completion_clusters_valid(plan: dict, state: dict | None = None) -> bool:
-    if state is not None and not open_review_ids_from_state(state):
+    triage_scope = active_triage_issue_scope(plan, state)
+    in_scope_open_ids = (
+        open_review_ids_from_state(state) if state is not None and triage_scope is None else (triage_scope or set())
+    )
+    if state is not None and not in_scope_open_ids:
         return True
 
-    manual_clusters = manual_clusters_with_issues(plan)
+    manual_clusters = scoped_manual_clusters_with_issues(plan, state)
     if not manual_clusters:
         any_clusters = [
             name for name, cluster in plan.get("clusters", {}).items()
@@ -73,7 +87,7 @@ def _completion_clusters_valid(plan: dict, state: dict | None = None) -> bool:
             print(colorize('  Create clusters: desloppify plan cluster create <name> --description "..."', "dim"))
             return False
 
-    gaps = unenriched_clusters(plan)
+    gaps = unenriched_clusters(plan, state)
     if gaps:
         print(colorize(f"  Cannot complete: {len(gaps)} cluster(s) still need enrichment.", "red"))
         for name, missing in gaps:
@@ -193,6 +207,7 @@ def _note_cites_new_issues_or_error(note: str, si) -> bool:
 
 
 __all__ = [
+    "_auto_confirm_enrich_for_complete",
     "_completion_clusters_valid",
     "_completion_strategy_valid",
     "_confirm_existing_stages_valid",
@@ -200,7 +215,10 @@ __all__ = [
     "_confirm_strategy_valid",
     "_confirmed_text_or_error",
     "_note_cites_new_issues_or_error",
+    "_require_enrich_stage_for_complete",
+    "_require_organize_stage_for_complete",
     "_require_prior_strategy_for_confirm",
+    "_require_sense_check_stage_for_complete",
     "_resolve_completion_strategy",
     "_resolve_confirm_existing_strategy",
 ]

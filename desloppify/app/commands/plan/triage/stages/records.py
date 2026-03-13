@@ -73,6 +73,7 @@ class SenseCheckRecord(TypedDict, total=False):
     timestamp: str
     confirmed_at: str
     confirmed_text: str
+    value_decisions: dict[str, str]
 
 
 TriageStages = dict[

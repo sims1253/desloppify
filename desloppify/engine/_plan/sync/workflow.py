@@ -258,6 +258,16 @@ def _inject(plan: PlanModel, item_id: str) -> QueueSyncResult:
     return QueueSyncResult(injected=[item_id])
 
 
+def clear_score_communicated_sentinel(plan: PlanModel) -> None:
+    """Clear the ``previous_plan_start_scores`` sentinel.
+
+    Call this in import/scan pre-steps when a trusted import completes or
+    a cycle boundary resets.  The sentinel gates ``sync_communicate_score_needed``
+    — clearing it allows communicate-score to re-inject next cycle.
+    """
+    plan.pop("previous_plan_start_scores", None)
+
+
 _EMPTY = QueueSyncResult
 
 
@@ -458,6 +468,7 @@ def _rebaseline_plan_start_scores(
 __all__ = [
     "PendingImportScoresMeta",
     "ScoreSnapshot",
+    "clear_score_communicated_sentinel",
     "import_scores_meta_matches",
     "pending_import_scores_meta",
     "sync_communicate_score_needed",

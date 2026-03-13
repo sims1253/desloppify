@@ -437,9 +437,8 @@ def test_sync_plan_after_import_preserves_scan_phase_for_temporary_skips(
     assert saved
 
 
-def test_sync_plan_after_import_does_not_purge_subjective_ids(monkeypatch) -> None:
+def test_sync_plan_after_import_prunes_covered_subjective_ids(monkeypatch) -> None:
     plan: dict = {"queue_order": ["subjective::naming_quality", "review::existing"]}
-    purge_calls: list[list[str]] = []
 
     _patch_basic_plan_sync_runtime(monkeypatch, plan=plan)
     monkeypatch.setattr(
@@ -450,6 +449,7 @@ def test_sync_plan_after_import_does_not_purge_subjective_ids(monkeypatch) -> No
             added_to_queue=["review::new"],
             triage_injected=False,
             stale_pruned_from_queue=[],
+            covered_subjective_pruned_from_queue=[],
             triage_injected_ids=[],
             triage_deferred=False,
         ),
@@ -458,11 +458,53 @@ def test_sync_plan_after_import_does_not_purge_subjective_ids(monkeypatch) -> No
     plan_sync_mod.sync_plan_after_import(
         state={"issues": {"review::new": {"summary": "new review work item"}}},
         diff={"new": 1, "reopened": 0},
-        assessment_mode="issues_only",
+        assessment_mode="trusted_internal",
+        request=_sync_request(
+            import_payload={"assessments": {"Naming quality": 80}, "issues": []},
+        ),
     )
 
-    assert purge_calls == []
-    assert "subjective::naming_quality" in plan["queue_order"]
+    assert "subjective::naming_quality" not in plan["queue_order"]
+
+
+def test_sync_plan_after_import_uses_pre_import_boundary_for_reconcile(monkeypatch) -> None:
+    plan: dict = {"queue_order": []}
+    seen = {"reconcile_called": False}
+
+    _patch_basic_plan_sync_runtime(monkeypatch, plan=plan)
+    monkeypatch.setattr(
+        plan_sync_mod,
+        "sync_plan_after_review_import",
+        lambda _plan, _state, inject_triage=False: (
+            _plan["queue_order"].append("review::new")
+            or SimpleNamespace(
+                new_ids={"review::new"},
+                added_to_queue=["review::new"],
+                triage_injected=False,
+                stale_pruned_from_queue=[],
+                covered_subjective_pruned_from_queue=[],
+                triage_injected_ids=[],
+                triage_deferred=False,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        plan_sync_mod,
+        "reconcile_plan",
+        lambda *_a, **_k: seen.__setitem__("reconcile_called", True)
+        or plan_sync_mod.ReconcileResult(),
+    )
+
+    plan_sync_mod.sync_plan_after_import(
+        state={"issues": {"review::new": {"summary": "new review work item"}}},
+        diff={"new": 1, "reopened": 0},
+        assessment_mode="trusted_internal",
+        request=_sync_request(
+            import_payload={"assessments": {"Naming quality": 80}, "issues": []},
+        ),
+    )
+
+    assert seen["reconcile_called"] is True
 
 
 def test_sync_plan_after_import_skips_mid_cycle_reconcile_for_assessment_only_import(
@@ -572,7 +614,8 @@ def test_sync_plan_after_import_skips_mid_cycle_reconcile_for_assessment_only_im
     )
 
     assert reconcile_calls == []
-    assert "auto/initial-review" in plan["clusters"]
+    assert plan["queue_order"] == []
+    assert plan["clusters"]["auto/initial-review"]["issue_ids"] == []
 
 
 def test_refresh_scorecard_after_import_only_for_trusted_assessments(monkeypatch) -> None:
@@ -739,11 +782,12 @@ def test_plan_sync_source_preserves_scoped_sync_pipeline_contract() -> None:
     assert 'trusted = assessment_mode in {"trusted_internal", "attested_external"}' in src
     assert "import_result = _sync_review_delta(plan, state, sync_inputs)" in src
     assert "import_scores_result = sync_import_scores_needed(" in src
-    assert 'plan.pop("previous_plan_start_scores", None)' in src
+    assert "clear_score_communicated_sentinel(plan)" in src
     assert "sync_inputs = _build_import_sync_inputs(diff, import_payload)" in src
     assert "result = ReconcileResult()" in src
-    assert "if live_planned_queue_empty(plan):" in src
-    assert "result = reconcile_plan(plan, state, target_strict=target_strict)" in src
+    assert "was_boundary_ready = live_planned_queue_empty(plan)" in src
+    assert "if was_boundary_ready and (" in src
+    assert "_prune_covered_subjective_ids_from_plan" in src
     assert "_append_review_import_sync_log(" in src
     assert "save_plan(plan, plan_path)" in src
     assert "_print_review_import_sync(" in src

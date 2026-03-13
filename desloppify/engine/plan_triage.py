@@ -118,8 +118,9 @@ def triage_phase_banner(
         )
     progress = resolved_snapshot.progress
     if progress.completed_count:
+        total_stages = len(TRIAGE_STAGE_LABELS)
         return (
-            f"TRIAGE MODE ({progress.completed_count}/6 stages recorded) — "
+            f"TRIAGE MODE ({progress.completed_count}/{total_stages} stages recorded) — "
             f"complete all stages to exit. {run_hint}"
         )
     return (

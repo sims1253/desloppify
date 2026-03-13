@@ -18,6 +18,7 @@ import desloppify.engine._plan.triage.dismiss as triage_dismiss_mod
 import desloppify.engine._plan.triage.playbook as triage_playbook_mod
 import desloppify.engine._scoring.state_integration_subjective as scoring_subjective_mod
 import desloppify.engine._work_queue.snapshot as snapshot_mod
+import desloppify.engine._work_queue.synthetic as synthetic_mod
 
 
 def test_sync_context_helpers_cover_policy_and_fallback_paths() -> None:
@@ -867,7 +868,7 @@ def test_queue_snapshot_non_autofix_auto_cluster_does_not_execute_without_queuei
     assert "dict_keys::a" in {item["id"] for item in snapshot.backlog_items}
 
 
-def test_queue_snapshot_orders_scan_review_and_workflow_postflight() -> None:
+def test_queue_snapshot_orders_scan_assessment_workflow_and_triage_postflight() -> None:
     review_state = {
         "issues": {
             "review::src/a.py::naming": {
@@ -961,14 +962,16 @@ def test_queue_snapshot_orders_scan_review_and_workflow_postflight() -> None:
             "epic_triage_meta": {"triaged_ids": ["review::src/a.py::naming"]},
         },
     )
-    assert assessment_with_review_snapshot.phase == snapshot_mod.PHASE_REVIEW_POSTFLIGHT
+    assert assessment_with_review_snapshot.phase == snapshot_mod.PHASE_ASSESSMENT_POSTFLIGHT
+    # Subjective dimension item is suppressed when review issues cover the
+    # same dimension — the assessment request alone surfaces.
     assert [item["id"] for item in assessment_with_review_snapshot.execution_items] == [
-        "review::src/a.py::naming"
+        "subjective_review::naming_quality",
     ]
-    assert "subjective::naming_quality" in {
+    assert "review::src/a.py::naming" in {
         item["id"] for item in assessment_with_review_snapshot.backlog_items
     }
-    assert "subjective_review::naming_quality" in {
+    assert "subjective::naming_quality" not in {
         item["id"] for item in assessment_with_review_snapshot.backlog_items
     }
 
@@ -1013,7 +1016,25 @@ def test_queue_snapshot_orders_scan_review_and_workflow_postflight() -> None:
     assert [item["id"] for item in post_triage_snapshot.execution_items] == ["review::src/a.py::naming"]
 
     workflow_snapshot = snapshot_mod.build_queue_snapshot(
-        {"issues": {}},
+        {
+            "dimension_scores": {
+                "Naming quality": {
+                    "score": 100.0,
+                    "strict": 100.0,
+                    "failing": 0,
+                    "detectors": {
+                        "subjective_assessment": {"dimension_key": "naming_quality"},
+                    },
+                }
+            },
+            "subjective_assessments": {
+                "naming_quality": {
+                    "score": 100.0,
+                    "needs_review_refresh": False,
+                }
+            },
+            "issues": {},
+        },
         plan={
             "queue_order": ["workflow::communicate-score", "triage::observe"],
             "refresh_state": {"postflight_scan_completed_at_scan_count": 1},
@@ -1021,6 +1042,60 @@ def test_queue_snapshot_orders_scan_review_and_workflow_postflight() -> None:
     )
     assert workflow_snapshot.phase == snapshot_mod.PHASE_WORKFLOW_POSTFLIGHT
     assert [item["id"] for item in workflow_snapshot.execution_items] == ["workflow::communicate-score"]
+
+    assessment_beats_workflow_snapshot = snapshot_mod.build_queue_snapshot(
+        assessment_state,
+        plan={
+            "queue_order": ["workflow::communicate-score", "triage::observe"],
+            "refresh_state": {
+                "postflight_scan_completed_at_scan_count": 1,
+                "lifecycle_phase": "workflow",
+            },
+        },
+    )
+    assert assessment_beats_workflow_snapshot.phase == snapshot_mod.PHASE_WORKFLOW_POSTFLIGHT
+    assert [item["id"] for item in assessment_beats_workflow_snapshot.execution_items] == [
+        "workflow::communicate-score",
+    ]
+
+
+def test_build_subjective_items_suppresses_same_cycle_review_refresh_during_workflow() -> None:
+    items = synthetic_mod.build_subjective_items(
+        {
+            "assessment_import_audit": [
+                {"timestamp": "2026-03-13T04:19:00+00:00", "mode": "trusted_internal"}
+            ],
+            "dimension_scores": {
+                "Naming quality": {
+                    "score": 70.0,
+                    "strict": 70.0,
+                    "failing": 1,
+                    "detectors": {
+                        "subjective_assessment": {"dimension_key": "naming_quality"},
+                    },
+                }
+            },
+            "subjective_assessments": {
+                "naming_quality": {
+                    "score": 70.0,
+                    "assessed_at": "2026-03-13T04:19:00+00:00",
+                    "needs_review_refresh": True,
+                    "refresh_reason": "review_issue_wontfix",
+                    "stale_since": "2026-03-13T04:39:00+00:00",
+                }
+            },
+        },
+        {},
+        threshold=95.0,
+        plan={
+            "refresh_state": {
+                "lifecycle_phase": "workflow",
+                "postflight_scan_completed_at_scan_count": 1,
+            }
+        },
+    )
+
+    assert items == []
 
 
 def test_queue_snapshot_prefers_deferred_disposition_over_run_scan() -> None:
@@ -1048,12 +1123,14 @@ def test_queue_snapshot_prefers_deferred_disposition_over_run_scan() -> None:
     assert [item["id"] for item in snapshot.execution_items] == ["workflow::deferred-disposition"]
 
 
-def test_coarse_phase_name_collapses_internal_review_workflow_and_triage() -> None:
-    assert snapshot_mod.coarse_phase_name(snapshot_mod.PHASE_REVIEW_INITIAL) == "review"
-    assert snapshot_mod.coarse_phase_name(snapshot_mod.PHASE_ASSESSMENT_POSTFLIGHT) == "review"
-    assert snapshot_mod.coarse_phase_name(snapshot_mod.PHASE_REVIEW_POSTFLIGHT) == "review"
-    assert snapshot_mod.coarse_phase_name(snapshot_mod.PHASE_WORKFLOW_POSTFLIGHT) == "workflow"
-    assert snapshot_mod.coarse_phase_name(snapshot_mod.PHASE_TRIAGE_POSTFLIGHT) == "triage"
+def test_coarse_lifecycle_phase_collapses_internal_review_workflow_and_triage() -> None:
+    from desloppify.engine._plan.refresh_lifecycle import COARSE_PHASE_MAP
+
+    assert COARSE_PHASE_MAP[snapshot_mod.PHASE_REVIEW_INITIAL] == "review"
+    assert COARSE_PHASE_MAP[snapshot_mod.PHASE_ASSESSMENT_POSTFLIGHT] == "review"
+    assert COARSE_PHASE_MAP[snapshot_mod.PHASE_REVIEW_POSTFLIGHT] == "review"
+    assert COARSE_PHASE_MAP[snapshot_mod.PHASE_WORKFLOW_POSTFLIGHT] == "workflow"
+    assert COARSE_PHASE_MAP[snapshot_mod.PHASE_TRIAGE_POSTFLIGHT] == "triage"
 
 
 def test_triage_playbook_commands_cover_runner_and_stage_validation() -> None:

@@ -102,6 +102,7 @@ class MergeScanOptions:
     include_slow: bool = True
     ignore: list[str] | None = None
     subjective_integrity_target: float | None = None
+    project_root: str | None = None
 
 
 def merge_scan(
@@ -170,6 +171,7 @@ def merge_scan(
         lang=resolved_options.lang,
         scan_path=resolved_options.scan_path,
         exclude=resolved_options.exclude,
+        project_root=resolved_options.project_root,
     )
 
     # Mark subjective assessments stale when mechanical issues changed.

@@ -128,10 +128,12 @@ def build_issue_items(
     status_filter: str,
     scope: str | None,
     chronic: bool,
+    forced_ids: set[str] | None = None,
 ) -> list[WorkQueueItem]:
     scoped = path_scoped_issues((state.get("work_items") or state.get("issues", {})), scan_path)
     subjective_scores = subjective_strict_scores(state)
     out: list[WorkQueueItem] = []
+    forced_ids = forced_ids or set()
 
     for issue_id, issue in scoped.items():
         if issue.get("suppressed"):
@@ -146,7 +148,7 @@ def build_issue_items(
         # Evidence-only: skip issues below standalone confidence threshold
         detector = issue.get("detector", "")
         meta = DETECTORS.get(detector)
-        if meta and meta.standalone_threshold:
+        if issue_id not in forced_ids and meta and meta.standalone_threshold:
             threshold_rank = CONFIDENCE_ORDER.get(meta.standalone_threshold, 9)
             issue_rank = CONFIDENCE_ORDER.get(issue.get("confidence", "low"), 9)
             if issue_rank > threshold_rank:

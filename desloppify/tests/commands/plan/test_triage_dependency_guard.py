@@ -65,7 +65,14 @@ class TestBlockedTriageStages:
         assert blocked["triage::organize"] == ["triage::reflect"]
 
     def test_all_confirmed_returns_empty(self):
-        plan = _plan_with_triage_stages("observe", "reflect", "organize", "enrich", "sense-check", "commit")
+        plan = _plan_with_triage_stages(
+            "observe",
+            "reflect",
+            "organize",
+            "enrich",
+            "sense-check",
+            "commit",
+        )
         assert _blocked_triage_stages(plan) == {}
 
     def test_no_triage_in_queue_returns_empty(self):

@@ -420,6 +420,7 @@ def merge_scan_results(
             include_slow=runtime.effective_include_slow,
             ignore=runtime.config.get("ignore", []),
             subjective_integrity_target=target_score,
+            project_root=str(get_project_root()),
         ),
     )
 

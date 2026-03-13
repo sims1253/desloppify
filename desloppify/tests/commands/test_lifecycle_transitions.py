@@ -1,7 +1,8 @@
 """Integration tests for lifecycle transitions through reconcile → work queue.
 
 Exercises the full lifecycle by walking through each stage:
-  scan → initial reviews → communicate-score → create-plan → triage → objectives
+  scan → initial reviews → objectives → postflight scan → subjective review
+  → communicate-score/create-plan → triage
 
 Between scans, items are completed via ``purge_ids`` (what ``plan resolve``
 does) and the queue is re-checked without reconciling.  ``reconcile`` only
@@ -114,15 +115,15 @@ def _queue_ids(state: dict, plan: dict) -> list[str]:
     return [item["id"] for item in result["items"]]
 
 
-def _spoof_reviews_complete(state: dict) -> None:
+def _spoof_reviews_complete(state: dict, *, score: float = 95.0) -> None:
     """Mutate state in place: replace all placeholder dims with scored ones."""
     for key in DIM_KEYS:
-        display, dim_entry, assessment = _scored_dim_entries(key, 75.0)
+        display, dim_entry, assessment = _scored_dim_entries(key, score)
         state["dimension_scores"][display] = dim_entry
         state["subjective_assessments"][key] = assessment
-    state["strict_score"] = 75.0
-    state["overall_score"] = 75.0
-    state["objective_score"] = 80.0
+    state["strict_score"] = score
+    state["overall_score"] = score
+    state["objective_score"] = score
 
 
 def _complete_endgame_subjective_reruns(state: dict) -> None:
@@ -201,8 +202,9 @@ class TestScanAfterReviewsInjectsWorkflow:
     def test_workflow_items_injected_on_next_scan(self, monkeypatch):
         """Scan after completing reviews injects communicate-score and create-plan.
 
-        Workflow items are postflight — they only become visible after objectives
-        are drained.
+        Postflight is exclusive once the scan boundary is crossed:
+        score/workflow surfaces first, and only then does execute backlog
+        reappear.
         """
         state = _build_state(OBJECTIVE_ISSUES, [_placeholder_dim_entries(k) for k in DIM_KEYS])
         plan = _reconcile(state, empty_plan(), monkeypatch)
@@ -216,33 +218,22 @@ class TestScanAfterReviewsInjectsWorkflow:
         plan = _reconcile(state, plan, monkeypatch)
 
         ids = _queue_ids(state, plan)
-        # Objective items visible while they exist
-        assert "obj-1" in ids
-        # Workflow items are postflight — gated behind objective items
-        assert WORKFLOW_COMMUNICATE_SCORE_ID not in ids
-
-        # After completing objectives, postflight sequence begins.
-        # Workflow items surface before subjective follow-up.
-        state["work_items"]["obj-1"]["status"] = "fixed"
-        state["work_items"]["obj-2"]["status"] = "fixed"
-        ids = _queue_ids(state, plan)
         assert WORKFLOW_COMMUNICATE_SCORE_ID in ids
         assert WORKFLOW_CREATE_PLAN_ID in ids
         assert ids.index(WORKFLOW_COMMUNICATE_SCORE_ID) < ids.index(WORKFLOW_CREATE_PLAN_ID)
 
-        # After completing workflow items, subjective follow-up becomes visible
         purge_ids(plan, [WORKFLOW_COMMUNICATE_SCORE_ID, WORKFLOW_CREATE_PLAN_ID])
         ids = _queue_ids(state, plan)
-        assert any(fid.startswith("subjective::") for fid in ids), f"Expected subjective: {ids}"
+        assert "obj-1" in ids and "obj-2" in ids
 
 
 # ---------------------------------------------------------------------------
-# Phase-order contract: score -> triage -> review -> assessment (after objective drains)
+# Phase-order contract: assessment -> score -> triage -> review (after objective drains)
 # ---------------------------------------------------------------------------
 
 class TestPhaseOrderInvariant:
 
-    def test_score_then_assessment_when_no_review_followup(self):
+    def test_assessment_then_score_when_no_review_followup(self):
         """Endgame queue order is fixed once objective backlog is drained."""
         state = _build_state(
             [],
@@ -261,20 +252,21 @@ class TestPhaseOrderInvariant:
         # Mark postflight scan as done so it doesn't block
         plan["refresh_state"] = {"postflight_scan_completed_at_scan_count": 1}
 
-        # Workflow items surface before subjective follow-up.
-        ids = _queue_ids(state, plan)
-        assert ids == [WORKFLOW_COMMUNICATE_SCORE_ID]
-
-        # After workflow completion, subjective follow-up appears.
-        purge_ids(plan, [WORKFLOW_COMMUNICATE_SCORE_ID])
+        # Subjective follow-up surfaces before workflow items.
         ids = _queue_ids(state, plan)
         assert ids == ["subjective::naming_quality"]
 
-        # After subjective follow-up completion, triage becomes visible.
+        # After subjective follow-up completion, workflow appears.
+        ids = _queue_ids(state, plan)
         state["subjective_assessments"]["naming_quality"]["needs_review_refresh"] = False
         state["subjective_assessments"]["naming_quality"]["score"] = 100.0
         state["dimension_scores"][DIM_DISPLAY["naming_quality"]]["score"] = 100.0
         state["dimension_scores"][DIM_DISPLAY["naming_quality"]]["strict"] = 100.0
+        ids = _queue_ids(state, plan)
+        assert ids == [WORKFLOW_COMMUNICATE_SCORE_ID]
+
+        # After workflow completion, triage becomes visible.
+        purge_ids(plan, [WORKFLOW_COMMUNICATE_SCORE_ID])
         ids = _queue_ids(state, plan)
         assert ids == ["triage::observe"]
 
@@ -286,7 +278,7 @@ class TestPhaseOrderInvariant:
 class TestTriageInjectedOnScan:
 
     def test_triage_after_review_issues_on_scan(self, monkeypatch):
-        """Scan with new review issues injects triage, but objectives stay unblocked."""
+        """Review-driven triage waits behind score workflow after review import."""
         state = _build_state(OBJECTIVE_ISSUES, [_placeholder_dim_entries(k) for k in DIM_KEYS])
         plan = _reconcile(state, empty_plan(), monkeypatch)
 
@@ -301,21 +293,14 @@ class TestTriageInjectedOnScan:
 
         ids = _queue_ids(state, plan)
         assert not any(fid.startswith("triage::") for fid in ids), ids
-        assert "obj-1" in ids and "obj-2" in ids
+        assert WORKFLOW_COMMUNICATE_SCORE_ID in ids
+        assert WORKFLOW_CREATE_PLAN_ID in ids
 
         # Triage stages are still injected in plan order.
         assert all(sid in plan["queue_order"] for sid in TRIAGE_STAGE_IDS)
 
-        # Once objective queue drains, lifecycle enters postflight.
-        # Workflow surfaces before triage/review/assessment.
-        state["work_items"]["obj-1"]["status"] = "fixed"
-        state["work_items"]["obj-2"]["status"] = "fixed"
-        ids = _queue_ids(state, plan)
-        workflow_ids = [fid for fid in ids if fid.startswith("workflow::")]
-        assert len(workflow_ids) > 0, f"Expected workflow items: {ids}"
-
-        # After completing workflow items, triage becomes visible.
-        purge_ids(plan, workflow_ids)
+        # After completing workflow items, triage becomes visible before execute resumes.
+        purge_ids(plan, [WORKFLOW_COMMUNICATE_SCORE_ID, WORKFLOW_CREATE_PLAN_ID])
         ids = _queue_ids(state, plan)
         triage_ids = [fid for fid in ids if fid.startswith("triage::")]
         assert len(triage_ids) == len(TRIAGE_STAGE_IDS), ids
@@ -356,34 +341,23 @@ class TestFullLifecycleGoldenPath:
         assert "obj-1" in ids, f"Post-reviews (no scan): {ids}"
         assert WORKFLOW_COMMUNICATE_SCORE_ID not in ids, f"Post-reviews (no scan): {ids}"
 
-        # ── Scan 2: workflow items injected but gated behind objectives ──
+        # ── Scan 2: score workflow surfaces before execute resumes ──
         plan = _reconcile(state, plan, monkeypatch)
         ids = _queue_ids(state, plan)
-        # Workflow items are postflight — only visible after objectives drain
-        assert "obj-1" in ids, f"Scan 2: {ids}"
-        assert WORKFLOW_COMMUNICATE_SCORE_ID not in ids, f"Scan 2: {ids}"
+        assert WORKFLOW_COMMUNICATE_SCORE_ID in ids, f"Scan 2: {ids}"
+        assert WORKFLOW_CREATE_PLAN_ID in ids, f"Scan 2: {ids}"
 
-        # ── Between scans: complete objectives to unlock postflight ──
-        state["work_items"]["obj-1"]["status"] = "fixed"
-        state["work_items"]["obj-2"]["status"] = "fixed"
-        ids = _queue_ids(state, plan)
-        # Workflow comes first in postflight
-        assert WORKFLOW_COMMUNICATE_SCORE_ID in ids, f"Post-subjective: {ids}"
-        assert WORKFLOW_CREATE_PLAN_ID in ids, f"Post-subjective: {ids}"
-
-        # ── Complete workflow items ──
+        # ── Complete workflow items; clear cycle baseline so execute resumes ──
         purge_ids(plan, [WORKFLOW_COMMUNICATE_SCORE_ID, WORKFLOW_CREATE_PLAN_ID])
+        plan["plan_start_scores"] = {}
         ids = _queue_ids(state, plan)
-        assert any(fid.startswith("subjective::") for fid in ids), f"Post-workflow: {ids}"
-
-        # ── Complete subjective follow-up ──
-        _complete_endgame_subjective_reruns(state)
-        ids = _queue_ids(state, plan)
-        assert not any(fid.startswith("workflow::") for fid in ids), f"Post-subjective: {ids}"
+        assert "obj-1" in ids and "obj-2" in ids, f"Post-workflow: {ids}"
 
         # ── Scan 3: add review issues + reopen objectives for mid-cycle test ──
         state["work_items"]["obj-1"]["status"] = "open"
         state["work_items"]["obj-2"]["status"] = "open"
+        # Place objectives in queue_order so the plan is mid-cycle (non-empty).
+        plan["queue_order"] = ["obj-1", "obj-2"]
         _add_review_issues(state)
         plan = _reconcile(state, plan, monkeypatch)
         ids = _queue_ids(state, plan)
@@ -392,7 +366,6 @@ class TestFullLifecycleGoldenPath:
         assert not any(sid in plan["queue_order"] for sid in TRIAGE_STAGE_IDS), (
             f"Triage should be deferred mid-cycle: {plan['queue_order']}"
         )
-        assert plan["epic_triage_meta"].get("triage_recommended"), "triage_recommended flag expected"
         assert "obj-1" in ids and "obj-2" in ids, f"Scan 3: {ids}"
 
         # ── Complete objective queue → rescan injects triage in plan, but

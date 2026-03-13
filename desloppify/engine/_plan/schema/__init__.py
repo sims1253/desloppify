@@ -161,9 +161,12 @@ class TriageStagePayload(TypedDict, total=False):
     cited_ids: list[str]
     timestamp: str
     issue_count: int
+    dimension_names: list[str]
+    dimension_counts: dict[str, int]
     recurring_dims: list[str]
     confirmed_at: str
     confirmed_text: str
+    assessments: list[dict[str, Any]]
     # Structured reflect contract (populated only for reflect stage)
     disposition_ledger: list[ReflectDisposition]
     cluster_blueprint: list[ReflectClusterBlueprint]
@@ -283,51 +286,12 @@ def triage_clusters(plan: dict[str, Any]) -> dict[str, Cluster]:
     }
 
 
-def _tracked_plan_ids(plan: dict[str, Any] | None) -> set[str]:
-    """Collect live issue IDs the plan is actively tracking."""
-    if not isinstance(plan, dict):
-        return set()
-    tracked: set[str] = {
-        str(issue_id)
-        for issue_id in plan.get("queue_order", [])
-        if isinstance(issue_id, str) and issue_id
-        and not any(issue_id.startswith(prefix) for prefix in SYNTHETIC_PREFIXES)
-    }
-    tracked.update(
-        str(issue_id)
-        for issue_id in plan.get("skipped", {}).keys()
-        if isinstance(issue_id, str) and issue_id
-        and not any(issue_id.startswith(prefix) for prefix in SYNTHETIC_PREFIXES)
-    )
-    tracked.update(
-        str(issue_id)
-        for issue_id in plan.get("overrides", {}).keys()
-        if isinstance(issue_id, str) and issue_id
-        and not any(issue_id.startswith(prefix) for prefix in SYNTHETIC_PREFIXES)
-    )
-    for cluster in plan.get("clusters", {}).values():
-        if not isinstance(cluster, dict):
-            continue
-        tracked.update(
-            str(issue_id)
-            for issue_id in cluster.get("issue_ids", [])
-            if isinstance(issue_id, str) and issue_id
-            and not any(issue_id.startswith(prefix) for prefix in SYNTHETIC_PREFIXES)
-        )
-        for step in cluster.get("action_steps", []):
-            if not isinstance(step, dict):
-                continue
-            tracked.update(
-                str(issue_id)
-                for issue_id in step.get("issue_refs", [])
-                if isinstance(issue_id, str) and issue_id
-                and not any(issue_id.startswith(prefix) for prefix in SYNTHETIC_PREFIXES)
-            )
-    return tracked
-
-
 def live_planned_queue_ids(plan: dict[str, Any] | None) -> set[str]:
-    """Return substantive live queue IDs sourced only from ``queue_order``."""
+    """Return substantive live queue IDs sourced only from ``queue_order``.
+
+    Overrides and clusters are ownership metadata — they must never expand
+    the live queue.  Only explicit ``queue_order`` entries count.
+    """
     if not isinstance(plan, dict):
         return set()
     skipped_ids = set(plan.get("skipped", {}).keys())
@@ -347,19 +311,27 @@ def executable_objective_ids(
 ) -> set[str]:
     """Return objective IDs eligible for execution.
 
-    Before the plan tracks any live objective work, all objective IDs are
-    implicitly executable. Once the plan tracks objective IDs, execution
-    becomes backlog-first and only objective IDs explicitly present in
-    ``plan["queue_order"]`` remain eligible for ``next``.
+    Before the plan tracks any queue work at all, all objective IDs are
+    implicitly executable. Once *any* queue items exist — including synthetic
+    review/workflow/triage items — execution becomes queue-driven and only
+    objective IDs explicitly present in ``plan["queue_order"]`` remain
+    eligible for ``next``.
     """
     if not isinstance(plan, dict):
         return set(all_objective_ids)
     skipped_ids = set(plan.get("skipped", {}).keys())
+    queued_ids = {
+        issue_id
+        for issue_id in plan.get("queue_order", [])
+        if isinstance(issue_id, str)
+        and issue_id
+        and issue_id not in skipped_ids
+    }
     live_queue_ids = live_planned_queue_ids(plan)
     queued_objective_ids = all_objective_ids & live_queue_ids
     if queued_objective_ids:
         return queued_objective_ids
-    if not live_queue_ids:
+    if not queued_ids:
         return set(all_objective_ids) - skipped_ids
     return set()
 

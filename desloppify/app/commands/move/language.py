@@ -10,7 +10,6 @@ from types import ModuleType
 
 from desloppify.languages import framework as lang_mod
 from desloppify.app.commands.helpers.lang import (
-    load_lang_config,
     load_lang_config_metadata,
     resolve_lang,
 )

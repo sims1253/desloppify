@@ -14,7 +14,7 @@ from desloppify.base.output.terminal import colorize
 from desloppify.engine.plan_triage import compute_triage_progress
 
 from ..services import TriageServices
-from ..validation.core import validate_organize_against_reflect_ledger
+from ..validation.organize_policy import validate_organize_against_reflect_ledger
 from ..validation.reflect_accounting import (
     analyze_reflect_issue_accounting,
     validate_reflect_accounting,
@@ -125,6 +125,7 @@ DEFAULT_STAGE_HANDLERS: dict[str, StageHandler] = {
             apply_updates=True,
             reload_plan=context.services.load_plan,
             append_run_log=context.append_run_log,
+            state=context.state,
         ),
         record_report=_record_sense_check_report,
     ),

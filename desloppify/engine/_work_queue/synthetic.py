@@ -29,6 +29,13 @@ from desloppify.engine._plan.constants import (
     confirmed_triage_stage_names,
     recorded_unconfirmed_triage_stage_names,
 )
+from desloppify.engine._plan.refresh_lifecycle import (
+    LIFECYCLE_PHASE_TRIAGE,
+    LIFECYCLE_PHASE_TRIAGE_POSTFLIGHT,
+    LIFECYCLE_PHASE_WORKFLOW,
+    LIFECYCLE_PHASE_WORKFLOW_POSTFLIGHT,
+    current_lifecycle_phase,
+)
 from desloppify.engine.plan_triage import (
     TRIAGE_IDS,
     TRIAGE_STAGE_DEPENDENCIES,
@@ -178,7 +185,11 @@ def build_triage_stage_items(plan: dict, state: dict) -> list[WorkQueueItem]:
 
 
 def build_subjective_items(
-    state: dict, issues: dict, *, threshold: float = 100.0
+    state: dict,
+    issues: dict,
+    *,
+    threshold: float = 100.0,
+    plan: dict | None = None,
 ) -> list[WorkQueueItem]:
     """Create synthetic subjective work items."""
     dim_scores = state.get("dimension_scores", {}) or {}
@@ -207,6 +218,37 @@ def build_subjective_items(
                 review_open_by_dim[dim_key] = review_open_by_dim.get(dim_key, 0) + 1
 
     items: list[WorkQueueItem] = []
+    latest_trusted_audit_ts = ""
+    for raw_entry in reversed(state.get("assessment_import_audit", []) or []):
+        if not isinstance(raw_entry, dict):
+            continue
+        if raw_entry.get("mode") not in {"trusted_internal", "attested_external"}:
+            continue
+        latest_trusted_audit_ts = str(raw_entry.get("timestamp", "")).strip()
+        if latest_trusted_audit_ts:
+            break
+    current_phase = current_lifecycle_phase(plan) if isinstance(plan, dict) else None
+
+    def _suppressed_same_cycle_refresh(dimension_key: str, *, stale: bool) -> bool:
+        if not stale or latest_trusted_audit_ts == "":
+            return False
+        if current_phase not in {
+            LIFECYCLE_PHASE_WORKFLOW, LIFECYCLE_PHASE_WORKFLOW_POSTFLIGHT,
+            LIFECYCLE_PHASE_TRIAGE, LIFECYCLE_PHASE_TRIAGE_POSTFLIGHT,
+        }:
+            return False
+        assessments = state.get("subjective_assessments", {}) or {}
+        payload = assessments.get(dimension_key)
+        if not isinstance(payload, dict):
+            return False
+        refresh_reason = str(payload.get("refresh_reason", "")).strip()
+        if not refresh_reason.startswith("review_issue_"):
+            return False
+        assessed_at = str(payload.get("assessed_at", "")).strip()
+        if assessed_at == "":
+            return False
+        return assessed_at >= latest_trusted_audit_ts
+
     def _prepare_command(
         cli_keys: list[str],
         *,
@@ -224,9 +266,6 @@ def build_subjective_items(
         if not name:
             continue
         strict_val = float(entry.get("strict", entry.get("score", 100.0)))
-        if strict_val >= threshold:
-            continue
-
         dim_key = _canonical_subjective_dimension_key(name)
         aliases = set(_subjective_dimension_aliases(name))
         cli_keys = [
@@ -242,14 +281,26 @@ def build_subjective_items(
             or (strict_val <= 0.0 and int(entry.get("failing", 0)) == 0)
         )
         is_stale = bool(entry.get("stale"))
+        if not is_unassessed and not is_stale:
+            continue
+        if _suppressed_same_cycle_refresh(dim_key, stale=is_stale):
+            continue
+        if strict_val >= threshold:
+            continue
+        # Live subjective work is limited to never-reviewed or explicitly
+        # stale dimensions. Fresh under-target scores remain advisory data,
+        # not active queue items.
         # If review issues already exist for this dimension, triage/fix them
         # before suggesting another review refresh pass.
         if open_review > 0:
             primary_command = "desloppify show review --status open"
         else:
             primary_command = _prepare_command(cli_keys)
-        stale_tag = " [stale — re-review]" if is_stale else ""
-        summary = f"Subjective dimension below target: {name} ({strict_val:.1f}%){stale_tag}"
+        reason_tags = ["below target"]
+        if is_stale:
+            reason_tags.append("stale")
+        reasons = ", ".join(reason_tags)
+        summary = f"Subjective review needed: {name} ({strict_val:.1f}%) [{reasons}]"
         item: WorkQueueItem = {
             "id": f"subjective::{slugify(dim_key)}",
             "detector": "subjective_assessment",

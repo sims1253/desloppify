@@ -156,6 +156,59 @@ def _referenced_plan_issue_ids(plan: PlanModel) -> set[str]:
     }
 
 
+def _prune_existing_superseded_references(
+    plan: PlanModel,
+    *,
+    result: ReconcileResult,
+) -> None:
+    superseded_ids = {
+        fid for fid in plan.get("superseded", {})
+        if isinstance(fid, str) and fid
+    }
+    if not superseded_ids:
+        return
+
+    changes = 0
+    order = plan.get("queue_order", [])
+    kept_order = [fid for fid in order if fid not in superseded_ids]
+    if len(kept_order) != len(order):
+        changes += len(order) - len(kept_order)
+        order[:] = kept_order
+
+    skipped = plan.get("skipped", {})
+    for fid in list(skipped):
+        if fid in superseded_ids:
+            skipped.pop(fid, None)
+            changes += 1
+
+    promoted_before = len(plan.get("promoted_ids", []))
+    prune_promoted_ids(plan, superseded_ids)
+    changes += max(0, promoted_before - len(plan.get("promoted_ids", [])))
+
+    for cluster in plan.get("clusters", {}).values():
+        issue_ids = cluster.get("issue_ids", [])
+        kept_issue_ids = [fid for fid in issue_ids if fid not in superseded_ids]
+        if len(kept_issue_ids) != len(issue_ids):
+            changes += len(issue_ids) - len(kept_issue_ids)
+            cluster["issue_ids"] = kept_issue_ids
+        for step in cluster.get("action_steps", []):
+            if not isinstance(step, dict):
+                continue
+            refs = step.get("issue_refs", [])
+            kept_refs = [fid for fid in refs if fid not in superseded_ids]
+            if len(kept_refs) != len(refs):
+                changes += len(refs) - len(kept_refs)
+                step["issue_refs"] = kept_refs
+
+    for fid in superseded_ids:
+        override = plan.get("overrides", {}).get(fid)
+        if override and override.get("cluster"):
+            override["cluster"] = None
+            changes += 1
+
+    result.changes += changes
+
+
 def _supersede_dead_references(
     plan: PlanModel,
     state: StateModel,
@@ -253,6 +306,7 @@ def reconcile_plan_after_scan(
     now = utc_now()
     now_dt = datetime.now(UTC)
 
+    _prune_existing_superseded_references(plan, result=result)
     referenced_ids = _referenced_plan_issue_ids(plan)
 
     # Snapshot non-epic cluster sizes before superseding so we can detect

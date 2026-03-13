@@ -61,8 +61,13 @@ def _make_stage_context(
 
 
 def test_completion_policy_helpers_cover_success_and_fail_paths(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(completion_policy_mod, "manual_clusters_with_issues", lambda _plan: ["c1"])
-    monkeypatch.setattr(completion_policy_mod, "unenriched_clusters", lambda _plan: [])
+    monkeypatch.setattr(
+        completion_policy_mod,
+        "scoped_manual_clusters_with_issues",
+        lambda _plan, _state=None: ["c1"],
+    )
+    monkeypatch.setattr(completion_policy_mod, "active_triage_issue_scope", lambda _plan, _state=None: None)
+    monkeypatch.setattr(completion_policy_mod, "unenriched_clusters", lambda _plan, _state=None: [])
     monkeypatch.setattr(completion_policy_mod, "unclustered_review_issues", lambda _plan, _state: [])
     assert completion_policy_mod._completion_clusters_valid({"clusters": {}}, state={}) is True
 
@@ -306,6 +311,27 @@ def test_confirmation_pipeline_can_skip_stale_issue_ref_warnings(monkeypatch) ->
     assert report.warnings == []
 
 
+def test_confirmation_pipeline_threads_triage_issue_scope(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_evaluate(plan, repo_root, **kwargs):
+        del plan, repo_root
+        captured.update(kwargs)
+        return confirmations_enrich_mod._ConfirmationCheckReport(failures=[], warnings=[])
+
+    monkeypatch.setattr(confirmations_enrich_mod, "evaluate_enrich_quality", _fake_evaluate)
+    monkeypatch.setattr("desloppify.base.discovery.paths.get_project_root", lambda: Path("."))
+
+    report = confirmations_enrich_mod._collect_enrich_level_confirmation_checks(
+        {"clusters": {}},
+        include_stale_issue_ref_warning=True,
+        triage_issue_ids={"review::current::issue"},
+    )
+
+    assert report.failures == []
+    assert captured["triage_issue_ids"] == {"review::current::issue"}
+
+
 def test_validate_attestation_rules() -> None:
     assert confirmations_basic_mod.validate_attestation("mentions naming", "observe", dimensions=["Naming"]) is None
     err = confirmations_basic_mod.validate_attestation(
@@ -444,6 +470,50 @@ def test_lifecycle_ensure_triage_started_handles_active_blocked_and_started() ->
             "injected_stage_ids": list(triage_lifecycle_mod.TRIAGE_STAGE_IDS),
         },
     )
+
+
+def test_lifecycle_ensure_triage_started_uses_plan_aware_backlog_for_workflow_only_queue() -> None:
+    saved: list[dict] = []
+    services = SimpleNamespace(
+        save_plan=lambda plan: saved.append(dict(plan)),
+        append_log_entry=lambda *_a, **_k: None,
+    )
+
+    plan = {
+        "queue_order": ["workflow::create-plan"],
+        "plan_start_scores": {"strict": 86.0},
+        "epic_triage_meta": {},
+    }
+    state = {
+        "issues": {
+            "smells::src/a.py::x": {
+                "id": "smells::src/a.py::x",
+                "detector": "smells",
+                "status": "open",
+                "file": "src/a.py",
+                "tier": 3,
+                "confidence": "high",
+                "summary": "objective issue still in state",
+                "detail": {},
+            }
+        },
+        "dimension_scores": {},
+        "subjective_assessments": {},
+    }
+
+    outcome = triage_lifecycle_mod.ensure_triage_started(
+        plan,
+        services=services,
+        state=state,
+        deps=triage_lifecycle_mod.TriageLifecycleDeps(
+            has_triage_in_queue=lambda _plan: False,
+            inject_triage_stages=lambda plan: plan.setdefault("queue_order", []).append("triage::observe"),
+            colorize=lambda text, _style: text,
+        ),
+    )
+
+    assert outcome.status == "started"
+    assert "triage::observe" in plan["queue_order"]
 
 
 def test_pipeline_context_helpers_load_prior_reports_directly() -> None:
@@ -629,7 +699,12 @@ def test_orchestrator_observe_helpers_and_dry_run(monkeypatch, tmp_path, capsys)
 
 
 def test_orchestrator_sense_dry_run(monkeypatch, tmp_path, capsys) -> None:
-    monkeypatch.setattr(orchestrator_sense_mod, "manual_clusters_with_issues", lambda _plan: ["cluster-a"])
+    monkeypatch.setattr(
+        orchestrator_sense_mod,
+        "scoped_manual_clusters_with_issues",
+        lambda _plan, _state=None: ["cluster-a"],
+    )
+    monkeypatch.setattr(orchestrator_sense_mod, "triage_scoped_plan", lambda plan, _state=None: plan)
     monkeypatch.setattr(
         orchestrator_sense_mod,
         "build_sense_check_content_prompt",
@@ -658,7 +733,12 @@ def test_orchestrator_sense_dry_run(monkeypatch, tmp_path, capsys) -> None:
 
 
 def test_orchestrator_sense_non_dry_run_merges_outputs(monkeypatch, tmp_path, capsys) -> None:
-    monkeypatch.setattr(orchestrator_sense_mod, "manual_clusters_with_issues", lambda _plan: ["cluster-a"])
+    monkeypatch.setattr(
+        orchestrator_sense_mod,
+        "scoped_manual_clusters_with_issues",
+        lambda _plan, _state=None: ["cluster-a"],
+    )
+    monkeypatch.setattr(orchestrator_sense_mod, "triage_scoped_plan", lambda plan, _state=None: plan)
     monkeypatch.setattr(
         orchestrator_sense_mod,
         "build_sense_check_content_prompt",
@@ -730,11 +810,16 @@ def test_orchestrator_sense_non_dry_run_merges_outputs(monkeypatch, tmp_path, ca
     assert "content:cluster-a" in result.merged_output
     assert "structure" in result.merged_output
     out = capsys.readouterr().out
-    assert "merged 2 batch outputs" in out
+    assert "merged 3 batch outputs" in out
 
 
 def test_orchestrator_sense_non_dry_run_reports_parallel_failures(monkeypatch, tmp_path, capsys) -> None:
-    monkeypatch.setattr(orchestrator_sense_mod, "manual_clusters_with_issues", lambda _plan: ["cluster-a"])
+    monkeypatch.setattr(
+        orchestrator_sense_mod,
+        "scoped_manual_clusters_with_issues",
+        lambda _plan, _state=None: ["cluster-a"],
+    )
+    monkeypatch.setattr(orchestrator_sense_mod, "triage_scoped_plan", lambda plan, _state=None: plan)
     monkeypatch.setattr(
         orchestrator_sense_mod,
         "build_sense_check_content_prompt",
@@ -776,7 +861,12 @@ def test_orchestrator_sense_non_dry_run_reports_parallel_failures(monkeypatch, t
 
 
 def test_orchestrator_sense_apply_updates_sequences_and_reloads_plan(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr(orchestrator_sense_mod, "manual_clusters_with_issues", lambda _plan: ["cluster-a"])
+    monkeypatch.setattr(
+        orchestrator_sense_mod,
+        "scoped_manual_clusters_with_issues",
+        lambda _plan, _state=None: ["cluster-a"],
+    )
+    monkeypatch.setattr(orchestrator_sense_mod, "triage_scoped_plan", lambda plan, _state=None: plan)
 
     content_modes: list[str] = []
     structure_modes: list[str] = []
@@ -834,6 +924,8 @@ def test_orchestrator_sense_apply_updates_sequences_and_reloads_plan(monkeypatch
             phase_order.append("content")
         if "structure" in labels:
             phase_order.append("structure")
+        if "value" in labels:
+            phase_order.append("value")
         for task in tasks.values():
             assert task().ok
         return []
@@ -854,6 +946,11 @@ def test_orchestrator_sense_apply_updates_sequences_and_reloads_plan(monkeypatch
         orchestrator_sense_mod,
         "build_sense_check_structure_prompt",
         fake_structure_prompt,
+    )
+    monkeypatch.setattr(
+        orchestrator_sense_mod,
+        "build_sense_check_value_prompt",
+        lambda **_kwargs: "value prompt",
     )
     monkeypatch.setattr(orchestrator_sense_mod, "run_triage_stage", fake_run_triage_stage)
     monkeypatch.setattr(orchestrator_sense_mod, "run_parallel_batches", fake_run_parallel_batches)
@@ -885,8 +982,94 @@ def test_orchestrator_sense_apply_updates_sequences_and_reloads_plan(monkeypatch
     assert content_modes == ["self_record"]
     assert structure_modes == ["self_record", "self_record"]
     assert structure_versions[-1] == "after-content"
-    assert reload_calls["count"] == 1
-    assert phase_order == ["content", "structure"]
+    assert reload_calls["count"] == 2
+    assert phase_order == ["content", "structure", "value"]
+
+
+def test_orchestrator_sense_scopes_content_batches_to_active_triage(monkeypatch, tmp_path) -> None:
+    content_clusters: list[str] = []
+    structure_versions: list[dict] = []
+
+    monkeypatch.setattr(
+        orchestrator_sense_mod,
+        "scoped_manual_clusters_with_issues",
+        lambda _plan, _state=None: ["current"],
+    )
+    monkeypatch.setattr(
+        orchestrator_sense_mod,
+        "triage_scoped_plan",
+        lambda plan, _state=None: {
+            **plan,
+            "clusters": {"current": plan["clusters"]["current"]},
+        },
+    )
+
+    def fake_content_prompt(*, cluster_name, plan, **_kwargs):
+        content_clusters.append(cluster_name)
+        assert set(plan.get("clusters", {})) == {"current"}
+        return "content prompt"
+
+    def fake_structure_prompt(*, plan, **_kwargs):
+        structure_versions.append(plan)
+        assert set(plan.get("clusters", {})) == {"current"}
+        return "structure prompt"
+
+    monkeypatch.setattr(orchestrator_sense_mod, "build_sense_check_content_prompt", fake_content_prompt)
+    monkeypatch.setattr(orchestrator_sense_mod, "build_sense_check_structure_prompt", fake_structure_prompt)
+    monkeypatch.setattr(orchestrator_sense_mod, "build_sense_check_value_prompt", lambda **_kwargs: "value prompt")
+
+    def fake_run_triage_stage(
+        *,
+        prompt,
+        repo_root,
+        output_file,
+        log_file,
+        timeout_seconds,
+        validate_output_fn,
+    ):
+        del prompt, repo_root, log_file, timeout_seconds
+        output_file.write_text("ok", encoding="utf-8")
+        assert validate_output_fn(output_file)
+        return codex_runner_mod.TriageStageRunResult(exit_code=0)
+
+    monkeypatch.setattr(orchestrator_sense_mod, "run_triage_stage", fake_run_triage_stage)
+    monkeypatch.setattr(
+        orchestrator_sense_mod,
+        "run_parallel_batches",
+        lambda **kwargs: [task() for task in kwargs["tasks"].values()] and [],
+    )
+
+    prompts_dir = tmp_path / "prompts"
+    output_dir = tmp_path / "out"
+    logs_dir = tmp_path / "logs"
+    prompts_dir.mkdir()
+    output_dir.mkdir()
+    logs_dir.mkdir()
+
+    result = orchestrator_sense_mod.run_sense_check(
+        plan={
+            "clusters": {
+                "current": {"issue_ids": ["review::current::issue"], "action_steps": []},
+                "legacy": {"issue_ids": ["review::legacy::issue"], "action_steps": []},
+            }
+        },
+        state={
+            "issues": {
+                "review::current::issue": {"status": "open", "detector": "review"},
+                "review::legacy::issue": {"status": "open", "detector": "review"},
+            }
+        },
+        repo_root=tmp_path,
+        prompts_dir=prompts_dir,
+        output_dir=output_dir,
+        logs_dir=logs_dir,
+        timeout_seconds=60,
+        dry_run=False,
+    )
+
+    assert result.ok
+    assert content_clusters == ["current"]
+    assert len(structure_versions) == 1
 
 
 def test_default_sense_handler_enables_apply_update_mode(monkeypatch, tmp_path: Path) -> None:
@@ -913,6 +1096,7 @@ def test_default_sense_handler_enables_apply_update_mode(monkeypatch, tmp_path: 
         cli_command="/tmp/run_desloppify.sh",
         append_run_log=lambda _line: None,
         services=SimpleNamespace(load_plan=lambda: {"clusters": {}}),
+        state=None,
     )
     handler = orchestrator_pipeline_execution_mod.DEFAULT_STAGE_HANDLERS["sense-check"]
     assert handler.run_parallel is not None

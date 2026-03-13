@@ -19,6 +19,9 @@ TRIAGE_STAGE_IDS = (
     "triage::sense-check",
     "triage::commit",
 )
+# value-check was folded into sense-check as a subagent in v0.9.9.
+# Old plan.json files may still contain triage_stages["value-check"] data;
+# it is silently ignored because _TRIAGE_STAGE_NAMES no longer includes it.
 TRIAGE_STAGE_SPECS = tuple(
     (stage_id.removeprefix("triage::"), stage_id) for stage_id in TRIAGE_STAGE_IDS
 )

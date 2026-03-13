@@ -134,9 +134,10 @@ class TestMergeScan:
         assert "smells::foo.py::debug_tag" in state["work_items"]
 
     @patch.object(merge_mod, "_recompute_stats")
-    def test_merge_keeps_disappeared_open_issue_open(self, mock_recompute):
-        """Old open issues not in current scan stay open until manually resolved."""
+    def test_merge_keeps_disappeared_open_issue_when_file_exists(self, mock_recompute, tmp_path):
+        """Open issues whose file still exists stay open even if absent from scan."""
         mock_recompute.return_value = None
+        (tmp_path / "old.py").write_text("# still here")
         state = self._make_state()
         state["work_items"]["smells::old.py::leftover"] = {
             "id": "smells::old.py::leftover",
@@ -155,10 +156,40 @@ class TestMergeScan:
         }
         state["stats"]["open"] = 1
         diff = merge_scan(
-            state, [], MergeScanOptions(lang="python", force_resolve=True)
+            state, [], MergeScanOptions(lang="python", force_resolve=True, project_root=str(tmp_path))
         )
         assert diff["auto_resolved"] == 0
         assert state["work_items"]["smells::old.py::leftover"]["status"] == "open"
+
+    @patch.object(merge_mod, "_recompute_stats")
+    def test_merge_auto_resolves_issue_when_file_deleted(self, mock_recompute, tmp_path):
+        """Open issues for files that no longer exist on disk are auto-resolved."""
+        mock_recompute.return_value = None
+        # tmp_path exists but old.py does NOT — simulates a deleted file
+        state = self._make_state()
+        state["work_items"]["smells::old.py::leftover"] = {
+            "id": "smells::old.py::leftover",
+            "detector": "smells",
+            "file": "old.py",
+            "tier": 2,
+            "confidence": "high",
+            "summary": "Old issue",
+            "detail": {},
+            "status": "open",
+            "note": None,
+            "first_seen": "2026-01-01T00:00:00+00:00",
+            "last_seen": "2026-01-01T00:00:00+00:00",
+            "resolved_at": None,
+            "reopen_count": 0,
+        }
+        state["stats"]["open"] = 1
+        diff = merge_scan(
+            state, [], MergeScanOptions(lang="python", force_resolve=True, project_root=str(tmp_path))
+        )
+        assert diff["auto_resolved"] == 1
+        item = state["work_items"]["smells::old.py::leftover"]
+        assert item["status"] == "auto_resolved"
+        assert "no longer exists" in item["note"]
 
     @patch.object(merge_mod, "_recompute_stats")
     def test_merge_with_ignore_patterns(self, mock_recompute):
@@ -519,9 +550,9 @@ class TestFixParser:
         parser = argparse.ArgumentParser()
         sub = parser.add_subparsers(dest="command")
         with patch(
-            "desloppify.app.cli_support.parser_groups_admin.get_lang"
-        ) as mock_get_lang:
-            mock_get_lang.side_effect = ImportError()
+            "desloppify.app.cli_support.parser_groups_admin.load_lang_config"
+        ) as mock_load:
+            mock_load.side_effect = ImportError()
             parser_admin_mod._add_autofix_parser(sub, ["python"])
 
         args = parser.parse_args(

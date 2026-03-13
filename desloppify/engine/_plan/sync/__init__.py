@@ -4,6 +4,7 @@ This package groups sync concerns that were previously in the flat
 ``engine._plan`` namespace:
 - ``context``: shared cycle/objective backlog predicates
 - ``dimensions``: subjective dimension queue sync
+- ``phase_cleanup``: prune stale synthetic IDs on phase transitions
 - ``pipeline``: shared boundary-triggered reconcile pipeline
 - ``review_import``: review-import-specific queue mutation before boundary sync
 - ``triage``: triage-stage queue sync

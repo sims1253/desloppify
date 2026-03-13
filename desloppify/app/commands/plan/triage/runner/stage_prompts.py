@@ -27,6 +27,7 @@ from .stage_prompts_observe import (
 from .stage_prompts_sense import (
     build_sense_check_content_prompt,
     build_sense_check_structure_prompt,
+    build_sense_check_value_prompt,
 )
 from .stage_prompts_validation import _validation_requirements
 
@@ -345,6 +346,7 @@ __all__ = [
     "build_observe_batch_prompt",
     "build_sense_check_content_prompt",
     "build_sense_check_structure_prompt",
+    "build_sense_check_value_prompt",
     "build_stage_prompt",
     "cmd_stage_prompt",
     "_observe_batch_instructions",

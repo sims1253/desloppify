@@ -27,6 +27,7 @@ from desloppify.engine._plan.sync import (
     reconcile_plan,
 )
 from desloppify.engine._plan.sync.workflow_gates import sync_import_scores_needed
+from desloppify.engine._plan.sync.workflow import clear_score_communicated_sentinel
 from desloppify.engine.plan_triage import (
     TRIAGE_CMD_RUN_STAGES_CLAUDE,
     TRIAGE_CMD_RUN_STAGES_CODEX,
@@ -63,9 +64,11 @@ def _print_review_import_sync(
     """Print summary of plan changes after review import sync."""
     new_ids = result.new_ids
     stale_pruned = result.stale_pruned_from_queue
+    covered_pruned = getattr(result, "covered_subjective_pruned_from_queue", [])
     print()
     _print_new_review_items(state, new_ids)
     _print_stale_review_prunes(stale_pruned)
+    _print_covered_subjective_prunes(covered_pruned)
     _print_review_import_footer(
         workflow_injected=workflow_injected,
         triage_injected=triage_injected,
@@ -95,6 +98,17 @@ def _print_stale_review_prunes(stale_pruned: list[str]) -> None:
     print(
         colorize(
             f"  Plan updated: {len(stale_pruned)} stale review work item(s) removed from queue.",
+            "bold",
+        )
+    )
+
+
+def _print_covered_subjective_prunes(covered_pruned: list[str]) -> None:
+    if not covered_pruned:
+        return
+    print(
+        colorize(
+            f"  Plan updated: {len(covered_pruned)} covered subjective queue item(s) removed.",
             "bold",
         )
     )
@@ -183,6 +197,49 @@ def _sync_review_delta(
     )
 
 
+def _prune_covered_subjective_ids_from_plan(
+    plan: dict,
+    *,
+    covered_ids: tuple[str, ...],
+) -> list[str]:
+    """Prune subjective queue placeholders that were just covered by review import."""
+    covered = {
+        issue_id
+        for issue_id in covered_ids
+        if isinstance(issue_id, str) and issue_id.startswith("subjective::")
+    }
+    if not covered:
+        return []
+
+    order = plan.get("queue_order")
+    if not isinstance(order, list):
+        return []
+
+    pruned = [issue_id for issue_id in order if issue_id in covered]
+    if not pruned:
+        return []
+
+    pruned_set = set(pruned)
+    order[:] = [issue_id for issue_id in order if issue_id not in pruned_set]
+
+    overrides = plan.get("overrides")
+    if isinstance(overrides, dict):
+        for issue_id in pruned_set:
+            overrides.pop(issue_id, None)
+
+    for cluster in plan.get("clusters", {}).values():
+        if not isinstance(cluster, dict):
+            continue
+        issue_ids = cluster.get("issue_ids")
+        if not isinstance(issue_ids, list):
+            continue
+        cluster["issue_ids"] = [
+            issue_id for issue_id in issue_ids if issue_id not in pruned_set
+        ]
+
+    return pruned
+
+
 def _append_review_import_sync_log(
     plan: dict,
     diff: dict,
@@ -219,6 +276,11 @@ def _append_review_import_sync_log(
             "stale_pruned_from_queue": (
                 import_result.stale_pruned_from_queue if import_result is not None else []
             ),
+            "covered_subjective_pruned_from_queue": (
+                getattr(import_result, "covered_subjective_pruned_from_queue", [])
+                if import_result is not None
+                else []
+            ),
             "covered_subjective": list(covered_ids),
             "stale_sync_injected": sorted(subjective.injected) if subjective is not None else [],
             "stale_sync_pruned": sorted(subjective.pruned) if subjective is not None else [],
@@ -253,8 +315,14 @@ def sync_plan_after_import(
         plan = load_plan(plan_path)
         sync_inputs = _build_import_sync_inputs(diff, import_payload)
         trusted = assessment_mode in {"trusted_internal", "attested_external"}
+        was_boundary_ready = live_planned_queue_empty(plan)
 
         import_result = _sync_review_delta(plan, state, sync_inputs)
+        covered_pruned = (
+            _prune_covered_subjective_ids_from_plan(plan, covered_ids=sync_inputs.covered_ids)
+            if trusted
+            else []
+        )
         import_scores_result = sync_import_scores_needed(
             plan,
             state,
@@ -263,13 +331,32 @@ def sync_plan_after_import(
             import_payload=import_payload,
         )
         if trusted:
-            plan.pop("previous_plan_start_scores", None)
+            clear_score_communicated_sentinel(plan)
 
         result = ReconcileResult()
-        if live_planned_queue_empty(plan):
+        if was_boundary_ready and (
+            sync_inputs.has_review_issue_delta
+            or import_scores_result.changes
+            or (trusted and bool(sync_inputs.covered_ids))
+        ):
             result = reconcile_plan(plan, state, target_strict=target_strict)
+        if import_result is not None and covered_pruned:
+            import_result = ReviewImportSyncResult(
+                new_ids=import_result.new_ids,
+                added_to_queue=import_result.added_to_queue,
+                triage_injected=import_result.triage_injected,
+                stale_pruned_from_queue=import_result.stale_pruned_from_queue,
+                covered_subjective_pruned_from_queue=covered_pruned,
+                triage_injected_ids=import_result.triage_injected_ids,
+                triage_deferred=import_result.triage_deferred,
+            )
 
-        dirty = bool(import_result is not None or import_scores_result.changes or result.dirty)
+        dirty = bool(
+            import_result is not None
+            or covered_pruned
+            or import_scores_result.changes
+            or result.dirty
+        )
         if dirty:
             _append_review_import_sync_log(
                 plan,

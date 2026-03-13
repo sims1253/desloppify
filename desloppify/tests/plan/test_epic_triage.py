@@ -530,14 +530,23 @@ class TestBuildTriageStageItems:
 
     def test_missing_queue_id_for_unconfirmed_stage_is_still_rendered(self):
         plan = empty_plan()
-        plan["queue_order"] = ["triage::enrich", "triage::sense-check", "triage::commit"]
+        plan["queue_order"] = [
+            "triage::enrich",
+            "triage::sense-check",
+            "triage::commit",
+        ]
         plan["epic_triage_meta"] = {
             "triage_stages": {"organize": {"report": "cluster plan"}},
         }
         state = _state_with_review_issues("r1")
         items = build_triage_stage_items(plan, state)
         ids = [it["id"] for it in items]
-        assert ids == ["triage::organize", "triage::enrich", "triage::sense-check", "triage::commit"]
+        assert ids == [
+            "triage::organize",
+            "triage::enrich",
+            "triage::sense-check",
+            "triage::commit",
+        ]
         enrich = next(it for it in items if it["id"] == "triage::enrich")
         assert enrich["blocked_by"] == ["triage::organize"]
 

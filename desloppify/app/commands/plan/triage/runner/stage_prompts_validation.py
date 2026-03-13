@@ -50,6 +50,9 @@ def _validation_requirements(stage: str) -> str:
             "## Validation Requirements (ALL BLOCKING)\n"
             "- Re-runs ALL enrich-level checks (detail, issue_refs, effort, paths, vagueness)\n"
             "- Stage must be recorded with a 100+ char report\n"
+            "- Report must include a `## Decision Ledger` with one line per live queue target\n"
+            "- Every live queue target must appear exactly once as keep, tighten, or skip\n"
+            "- Report must cite real file paths to prove the code was re-read\n"
             "- Stage must be confirmed with an 80+ char attestation mentioning cluster names\n"
         )
     return ""

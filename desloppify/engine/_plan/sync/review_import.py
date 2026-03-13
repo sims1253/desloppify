@@ -23,6 +23,7 @@ class ReviewImportSyncResult:
     added_to_queue: list[str]
     triage_injected: bool
     stale_pruned_from_queue: list[str] = field(default_factory=list)
+    covered_subjective_pruned_from_queue: list[str] = field(default_factory=list)
     triage_injected_ids: list[str] = field(default_factory=list)
     triage_deferred: bool = False
 

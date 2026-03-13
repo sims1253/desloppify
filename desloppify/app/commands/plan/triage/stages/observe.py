@@ -14,6 +14,7 @@ from ..stage_queue import (
     print_cascade_clear_feedback,
 )
 from ..lifecycle import TriageLifecycleDeps, ensure_triage_started
+from ..observe_batches import observe_dimension_breakdown
 from ..services import TriageServices, default_triage_services
 from .flow_helpers import validate_stage_report_length
 from .records import record_observe_stage, resolve_reusable_report
@@ -27,7 +28,7 @@ def cmd_stage_observe(
     has_triage_in_queue_fn=has_triage_in_queue,
     inject_triage_stages_fn=inject_triage_stages,
 ) -> None:
-    """Record the OBSERVE stage: agent analyses themes and root causes."""
+    """Record the OBSERVE stage: verify each queued issue against the code."""
     report: str | None = getattr(args, "report", None)
     attestation: str | None = getattr(args, "attestation", None)
 
@@ -71,6 +72,8 @@ def cmd_stage_observe(
             cited_ids=[],
             existing_stage=existing_stage,
             is_reuse=is_reuse,
+            dimension_names=[],
+            dimension_counts={},
         )
         resolved_services.save_plan(plan)
         print(colorize("  Observe stage recorded (no issues to analyse).", "green"))
@@ -80,10 +83,14 @@ def cmd_stage_observe(
                 print_cascade_clear_feedback(cleared, stages)
         return
 
+    by_dim, dim_names = observe_dimension_breakdown(si)
     if not validate_stage_report_length(
         report=report,
         issue_count=issue_count,
-        guidance="  Describe themes, root causes, contradictions, and how issues relate.",
+        guidance=(
+            "  Verify each issue with code evidence, record the verdicts you reached,"
+            " and cite the files you read."
+        ),
     ):
         return
 
@@ -145,6 +152,8 @@ def cmd_stage_observe(
         existing_stage=existing_stage,
         is_reuse=is_reuse,
         assessments=assessments,
+        dimension_names=dim_names,
+        dimension_counts=by_dim,
     )
     resolved_services.save_plan(plan)
     resolved_services.append_log_entry(

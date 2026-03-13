@@ -85,7 +85,14 @@ def resolve_synthetic_ids(patterns: list[str]) -> tuple[list[str], list[str]]:
 def blocked_triage_stages(plan: dict) -> dict[str, list[str]]:
     """Return triage stages that are blocked by unmet dependencies."""
     order_set = set(plan.get("queue_order", []))
-    stage_names = ("observe", "reflect", "organize", "enrich", "sense-check", "commit")
+    stage_names = (
+        "observe",
+        "reflect",
+        "organize",
+        "enrich",
+        "sense-check",
+        "commit",
+    )
     present_names = {
         name
         for stage_id, name in zip(TRIAGE_STAGE_IDS, stage_names, strict=False)

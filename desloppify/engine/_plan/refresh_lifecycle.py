@@ -1,10 +1,4 @@
-"""Helpers for the persisted queue lifecycle phase.
-
-The persisted phase is the normal source of truth for CLI/debugging, but it is
-not trusted blindly. Queue assembly still re-resolves the active phase from the
-currently visible items as a safety net so stale saved state cannot strand the
-user in the wrong phase after out-of-band changes.
-"""
+"""Helpers for the persisted queue lifecycle phase."""
 
 from __future__ import annotations
 
@@ -17,20 +11,33 @@ from desloppify.engine._state.issue_semantics import counts_toward_objective_bac
 _POSTFLIGHT_SCAN_KEY = "postflight_scan_completed_at_scan_count"
 _LIFECYCLE_PHASE_KEY = "lifecycle_phase"
 
+LIFECYCLE_PHASE_REVIEW_INITIAL = "review_initial"
+LIFECYCLE_PHASE_ASSESSMENT_POSTFLIGHT = "assessment_postflight"
+LIFECYCLE_PHASE_REVIEW_POSTFLIGHT = "review_postflight"
+LIFECYCLE_PHASE_WORKFLOW_POSTFLIGHT = "workflow_postflight"
+LIFECYCLE_PHASE_TRIAGE_POSTFLIGHT = "triage_postflight"
+LIFECYCLE_PHASE_EXECUTE = "execute"
 LIFECYCLE_PHASE_SCAN = "scan"
+
+# Coarse lifecycle names remain valid persisted values for older plan data.
 LIFECYCLE_PHASE_REVIEW = "review"
 LIFECYCLE_PHASE_WORKFLOW = "workflow"
 LIFECYCLE_PHASE_TRIAGE = "triage"
-LIFECYCLE_PHASE_EXECUTE = "execute"
-VALID_LIFECYCLE_PHASES = frozenset(
-    {
-        LIFECYCLE_PHASE_SCAN,
-        LIFECYCLE_PHASE_REVIEW,
-        LIFECYCLE_PHASE_WORKFLOW,
-        LIFECYCLE_PHASE_TRIAGE,
-        LIFECYCLE_PHASE_EXECUTE,
-    }
-)
+
+COARSE_PHASE_MAP = {
+    LIFECYCLE_PHASE_REVIEW_INITIAL: LIFECYCLE_PHASE_REVIEW,
+    LIFECYCLE_PHASE_ASSESSMENT_POSTFLIGHT: LIFECYCLE_PHASE_REVIEW,
+    LIFECYCLE_PHASE_REVIEW_POSTFLIGHT: LIFECYCLE_PHASE_REVIEW,
+    LIFECYCLE_PHASE_WORKFLOW_POSTFLIGHT: LIFECYCLE_PHASE_WORKFLOW,
+    LIFECYCLE_PHASE_TRIAGE_POSTFLIGHT: LIFECYCLE_PHASE_TRIAGE,
+    LIFECYCLE_PHASE_EXECUTE: LIFECYCLE_PHASE_EXECUTE,
+    LIFECYCLE_PHASE_SCAN: LIFECYCLE_PHASE_SCAN,
+    LIFECYCLE_PHASE_REVIEW: LIFECYCLE_PHASE_REVIEW,
+    LIFECYCLE_PHASE_WORKFLOW: LIFECYCLE_PHASE_WORKFLOW,
+    LIFECYCLE_PHASE_TRIAGE: LIFECYCLE_PHASE_TRIAGE,
+}
+
+VALID_LIFECYCLE_PHASES = frozenset(COARSE_PHASE_MAP)
 
 
 def _refresh_state(plan: PlanModel) -> dict[str, object]:
@@ -103,56 +110,14 @@ def set_lifecycle_phase(plan: PlanModel, phase: str) -> bool:
     return True
 
 
-def sync_lifecycle_phase(
-    plan: PlanModel,
-    *,
-    has_initial_reviews: bool,
-    has_objective_backlog: bool,
-    has_postflight_review: bool,
-    has_postflight_workflow: bool,
-    has_triage: bool,
-    has_deferred: bool,
-) -> tuple[str, bool]:
-    """Resolve and persist the current lifecycle phase from queue-state facts."""
-    phase = resolve_lifecycle_phase(
-        plan,
-        has_initial_reviews=has_initial_reviews,
-        has_objective_backlog=has_objective_backlog,
-        has_postflight_review=has_postflight_review,
-        has_postflight_workflow=has_postflight_workflow,
-        has_triage=has_triage,
-        has_deferred=has_deferred,
-    )
-    return phase, set_lifecycle_phase(plan, phase)
-
-
-def resolve_lifecycle_phase(
-    plan: PlanModel,
-    *,
-    has_initial_reviews: bool,
-    has_objective_backlog: bool,
-    has_postflight_review: bool,
-    has_postflight_workflow: bool,
-    has_triage: bool,
-    has_deferred: bool,
-) -> str:
-    """Resolve the lifecycle phase from explicit queue-state facts."""
-    if has_initial_reviews:
-        return LIFECYCLE_PHASE_REVIEW
-    if has_objective_backlog:
-        return LIFECYCLE_PHASE_EXECUTE
-    if has_deferred or postflight_scan_pending(plan):
-        return LIFECYCLE_PHASE_SCAN
-    if has_postflight_review:
-        return LIFECYCLE_PHASE_REVIEW
-    if has_postflight_workflow:
-        return LIFECYCLE_PHASE_WORKFLOW
-    if has_triage:
-        return LIFECYCLE_PHASE_TRIAGE
-    persisted = current_lifecycle_phase(plan)
-    if persisted is not None:
-        return persisted
-    return LIFECYCLE_PHASE_SCAN
+def coarse_lifecycle_phase(plan: PlanModel | None) -> str | None:
+    """Return the coarse lifecycle phase for persisted fine/coarse plan data."""
+    if not isinstance(plan, dict):
+        return None
+    phase = current_lifecycle_phase(plan)
+    if phase is None:
+        return None
+    return COARSE_PHASE_MAP.get(phase)
 
 
 def postflight_scan_pending(plan: PlanModel) -> bool:
@@ -198,17 +163,22 @@ def clear_postflight_scan_completion(
 
 
 __all__ = [
+    "COARSE_PHASE_MAP",
+    "coarse_lifecycle_phase",
+    "LIFECYCLE_PHASE_ASSESSMENT_POSTFLIGHT",
     "clear_postflight_scan_completion",
     "current_lifecycle_phase",
     "LIFECYCLE_PHASE_EXECUTE",
     "LIFECYCLE_PHASE_REVIEW",
+    "LIFECYCLE_PHASE_REVIEW_INITIAL",
+    "LIFECYCLE_PHASE_REVIEW_POSTFLIGHT",
     "LIFECYCLE_PHASE_SCAN",
     "LIFECYCLE_PHASE_TRIAGE",
+    "LIFECYCLE_PHASE_TRIAGE_POSTFLIGHT",
     "LIFECYCLE_PHASE_WORKFLOW",
+    "LIFECYCLE_PHASE_WORKFLOW_POSTFLIGHT",
     "mark_postflight_scan_completed",
     "postflight_scan_pending",
-    "resolve_lifecycle_phase",
     "set_lifecycle_phase",
-    "sync_lifecycle_phase",
     "VALID_LIFECYCLE_PHASES",
 ]
