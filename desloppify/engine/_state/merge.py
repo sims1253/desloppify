@@ -11,6 +11,7 @@ __all__ = [
 ]
 
 from desloppify.base.registry import DETECTORS
+from desloppify.engine._state.issue_semantics import ensure_issue_semantics
 from desloppify.engine._state.merge_history import (
     _append_scan_history,
     _build_merge_diff,
@@ -110,6 +111,9 @@ def merge_scan(
 ) -> ScanDiff:
     """Merge a fresh scan into existing state and return a diff summary."""
     ensure_state_defaults(state)
+    for issue in current_issues:
+        if isinstance(issue, dict):
+            ensure_issue_semantics(issue)
     resolved_options = options or MergeScanOptions()
 
     now = utc_now()
@@ -128,7 +132,7 @@ def merge_scan(
         codebase_metrics=resolved_options.codebase_metrics,
     )
 
-    existing = state["issues"]
+    existing = state["work_items"]
     ignore_patterns = (
         resolved_options.ignore
         if resolved_options.ignore is not None

@@ -34,6 +34,7 @@ class QueueItemCommon(QueueItemBase, total=False):
     """Optional fields shared across multiple queue item variants."""
 
     detector: str
+    work_item_kind: str
     issue_kind: str
     origin: str
     file: str
@@ -81,6 +82,7 @@ class QueueItemCommon(QueueItemBase, total=False):
     epic_triage_meta: dict[str, Any]
     fixers: list[str]
     issue_ids: list[str]
+    work_items: dict[str, Any]
     issues: dict[str, Any]
     lang_capabilities: dict[str, Any]
     name: str
@@ -95,10 +97,14 @@ class QueueItemCommon(QueueItemBase, total=False):
     triage_stages: dict[str, Any]
 
 
-class IssueQueueItem(QueueItemCommon, total=False):
-    """Concrete queue item for a detector finding."""
+class WorkItemQueueItem(QueueItemCommon, total=False):
+    """Concrete queue item for one tracked work item."""
 
     tier: int
+
+
+# Legacy alias retained while imports move to the new name.
+IssueQueueItem = WorkItemQueueItem
 
 
 class ClusterQueueItem(QueueItemCommon, total=False):
@@ -188,7 +194,7 @@ class SerializedQueueItem(TypedDict, total=False):
 
 
 WorkQueueItem: TypeAlias = (
-    IssueQueueItem
+    WorkItemQueueItem
     | ClusterQueueItem
     | WorkflowStageItem
     | WorkflowActionItem
@@ -211,4 +217,5 @@ __all__ = [
     "WorkflowStageItem",
     "WorkQueueGroups",
     "WorkQueueItem",
+    "WorkItemQueueItem",
 ]

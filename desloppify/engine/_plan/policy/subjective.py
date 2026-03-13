@@ -108,7 +108,7 @@ def compute_subjective_visibility(
         else scan_path
     )
 
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     skipped_ids = set((plan or {}).get("skipped", {}).keys())
 
     # Count open, non-suppressed, objective issues.

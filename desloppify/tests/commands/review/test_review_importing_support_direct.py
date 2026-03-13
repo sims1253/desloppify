@@ -233,7 +233,7 @@ def test_import_holistic_issues_ignores_unknown_context_update_dimensions() -> N
             "dimension_judgment": {
                 "naming_quality": {
                     "strengths": ["Names are mostly precise."],
-                    "issue_character": "Minor drift remains localized.",
+                    "dimension_character": "Minor drift remains localized.",
                     "score_rationale": "The naming is mostly dependable with a few rough edges.",
                 }
             },

@@ -44,7 +44,7 @@ _VALID_PATTERN_HINTS = (
 
 
 def _all_known_issue_ids(state: dict, plan: dict | None) -> list[str]:
-    all_ids: list[str] = list(state.get("issues", {}).keys())
+    all_ids: list[str] = list((state.get("work_items") or state.get("issues", {})).keys())
     if plan is None:
         return all_ids
     seen_ids: set[str] = set(all_ids)

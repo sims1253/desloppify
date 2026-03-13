@@ -32,7 +32,7 @@ def new_item_ids(state: StateModel) -> set[str]:
         return set()
     return {
         issue_id
-        for issue_id, issue in state.get("issues", {}).items()
+        for issue_id, issue in (state.get("work_items") or state.get("issues", {})).items()
         if issue.get("first_seen", "") >= threshold
     }
 

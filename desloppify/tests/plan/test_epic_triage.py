@@ -30,9 +30,9 @@ from desloppify.engine._work_queue.synthetic import build_triage_stage_items
 
 def _state_with_review_issues(*ids: str) -> dict:
     """Build minimal state with open review issues."""
-    issues = {}
+    work_items = {}
     for fid in ids:
-        issues[fid] = {
+        work_items[fid] = {
             "status": "open",
             "detector": "review",
             "file": "test.py",
@@ -41,11 +41,12 @@ def _state_with_review_issues(*ids: str) -> dict:
             "tier": 2,
             "detail": {"dimension": "abstraction_fitness"},
         }
-    return {"issues": issues, "scan_count": 5, "dimension_scores": {}}
+    return {"work_items": work_items, "issues": work_items, "scan_count": 5, "dimension_scores": {}}
 
 
 def _state_empty() -> dict:
-    return {"issues": {}, "scan_count": 1, "dimension_scores": {}}
+    work_items: dict[str, dict] = {}
+    return {"work_items": work_items, "issues": work_items, "scan_count": 1, "dimension_scores": {}}
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +175,7 @@ class TestSyncTriageNeeded:
         plan = empty_plan()
         plan["epic_triage_meta"] = {"issue_snapshot_hash": h}
         # Resolve r2
-        state["issues"]["r2"]["status"] = "fixed"
+        state["work_items"]["r2"]["status"] = "fixed"
         result = sync_triage_needed(plan, state)
         assert result.injected
 
@@ -549,7 +550,7 @@ class TestCollectTriageInput:
     def test_collects_open_review_issues(self):
         plan = empty_plan()
         state = _state_with_review_issues("r1", "r2")
-        state["issues"]["u1"] = {"status": "open", "detector": "unused"}
+        state["work_items"]["u1"] = {"status": "open", "detector": "unused"}
         si = collect_triage_input(plan, state)
         assert len(si.review_issues) == 2
         assert "r1" in si.review_issues
@@ -584,7 +585,7 @@ class TestCollectTriageInput:
             "action": "desloppify autofix import-cleanup --dry-run",
         }
         state = _state_with_review_issues("r1")
-        state["issues"]["u1"] = {"status": "open", "detector": "unused"}
+        state["work_items"]["u1"] = {"status": "open", "detector": "unused"}
 
         si = collect_triage_input(plan, state)
 

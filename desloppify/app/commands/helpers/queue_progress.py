@@ -208,7 +208,7 @@ def plan_aware_queue_breakdown(
             cluster_member_ids = set(cluster_data.get("issue_ids", []))
             open_issues = {
                 fid
-                for fid, f in state.get("issues", {}).items()
+                for fid, f in (state.get("work_items") or state.get("issues", {})).items()
                 if f.get("status") == "open"
             }
             focus_cluster_count = len(cluster_member_ids & open_issues)

@@ -322,7 +322,7 @@ def show_structural_areas(state: StateModel) -> None:
 
 def show_review_summary(state: StateModel) -> None:
     """Show review issues summary if any exist."""
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     review_open = [
         f
         for f in issues.values()

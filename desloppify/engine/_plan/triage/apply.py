@@ -13,7 +13,7 @@ from desloppify.engine._plan.schema import (
 )
 from desloppify.engine._plan.skip_policy import skip_kind_state_status
 from desloppify.engine._state.issue_semantics import is_triage_finding
-from desloppify.engine._state.schema import StateModel, utc_now
+from desloppify.engine._state.schema import StateModel, ensure_state_defaults, utc_now
 
 from .dismiss import dismiss_triage_issues
 from .prompt import TriageResult
@@ -170,7 +170,7 @@ def _set_triage_meta(
     current_hash = review_issue_snapshot_hash(state)
     open_review_ids = sorted(
         fid
-        for fid, issue in state.get("issues", {}).items()
+        for fid, issue in (state.get("work_items") or state.get("issues", {})).items()
         if issue.get("status") == "open"
         and is_triage_finding(issue)
     )
@@ -201,6 +201,7 @@ def apply_triage_to_plan(
     4. Updates epic_triage_meta with snapshot hash
     """
     ensure_plan_defaults(plan)
+    ensure_state_defaults(state)
     now = utc_now()
     result = TriageMutationResult()
     result.strategy_summary = triage.strategy_summary
@@ -232,7 +233,7 @@ def apply_triage_to_plan(
     result.issues_dismissed += dismiss_count
 
     # Sync state status for dismissed issues so state is authoritative.
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     triaged_out_status = skip_kind_state_status("triaged_out")
     for fid in dismissed_ids:
         issue = issues.get(fid)

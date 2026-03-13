@@ -90,18 +90,22 @@ def test_issue_semantics_normalize_legacy_detector_rows():
     issue_semantics_mod.ensure_issue_semantics(request_issue)
     issue_semantics_mod.ensure_issue_semantics(mechanical_issue)
 
+    assert review_issue["work_item_kind"] == issue_semantics_mod.REVIEW_DEFECT
     assert review_issue["issue_kind"] == issue_semantics_mod.REVIEW_FINDING
     assert review_issue["origin"] == issue_semantics_mod.REVIEW_IMPORT_ORIGIN
+    assert concern_issue["work_item_kind"] == issue_semantics_mod.REVIEW_CONCERN
     assert concern_issue["issue_kind"] == issue_semantics_mod.CONCERN_FINDING
+    assert request_issue["work_item_kind"] == issue_semantics_mod.ASSESSMENT_REQUEST
     assert request_issue["issue_kind"] == issue_semantics_mod.REVIEW_REQUEST
-    assert request_issue["origin"] == issue_semantics_mod.SYNTHETIC_REQUEST_ORIGIN
+    assert request_issue["origin"] == issue_semantics_mod.SYNTHETIC_TASK_ORIGIN
+    assert mechanical_issue["work_item_kind"] == issue_semantics_mod.MECHANICAL_DEFECT
     assert mechanical_issue["issue_kind"] == issue_semantics_mod.MECHANICAL_FINDING
     assert mechanical_issue["origin"] == issue_semantics_mod.SCAN_ORIGIN
 
 
 def test_validate_state_invariants_rejects_invalid_issue_semantics():
     state = schema_mod.empty_state()
-    state["issues"] = {
+    state["work_items"] = {
         "bad": {
             "id": "bad",
             "detector": "unused",
@@ -124,7 +128,7 @@ def test_validate_state_invariants_rejects_invalid_issue_semantics():
     try:
         schema_mod.validate_state_invariants(state)
     except ValueError as exc:
-        assert "issue_kind" in str(exc)
+        assert "work_item_kind" in str(exc)
     else:
         raise AssertionError("validate_state_invariants should reject invalid issue_kind")
 
@@ -177,7 +181,7 @@ def test_match_and_resolve_issues_updates_state():
     )
     hidden_issue["suppressed"] = True
 
-    state["issues"] = {
+    state["work_items"] = {
         open_issue["id"]: open_issue,
         hidden_issue["id"]: hidden_issue,
     }
@@ -195,7 +199,7 @@ def test_match_and_resolve_issues_updates_state():
     )
 
     assert resolved_ids == [open_issue["id"]]
-    resolved = state["issues"][open_issue["id"]]
+    resolved = state["work_items"][open_issue["id"]]
     assert resolved["status"] == "fixed"
     assert resolved["note"] == "done"
     assert resolved["resolved_at"] is not None
@@ -250,7 +254,7 @@ def test_resolve_fixed_review_marks_assessment_stale_preserves_score():
         summary="naming issue",
         detail={"dimension": "naming_quality"},
     )
-    state["issues"] = {review_issue["id"]: review_issue}
+    state["work_items"] = {review_issue["id"]: review_issue}
     state["subjective_assessments"] = {
         "naming_quality": {"score": 82, "source": "holistic"},
         "logic_clarity": {"score": 74, "source": "holistic"},
@@ -288,7 +292,7 @@ def test_resolve_wontfix_review_marks_assessment_stale():
         summary="naming issue",
         detail={"dimension": "naming_quality"},
     )
-    state["issues"] = {review_issue["id"]: review_issue}
+    state["work_items"] = {review_issue["id"]: review_issue}
     state["subjective_assessments"] = {
         "naming_quality": {"score": 82, "source": "holistic"}
     }
@@ -320,7 +324,7 @@ def test_resolve_false_positive_review_marks_assessment_stale():
         summary="naming issue",
         detail={"dimension": "naming_quality"},
     )
-    state["issues"] = {review_issue["id"]: review_issue}
+    state["work_items"] = {review_issue["id"]: review_issue}
     state["subjective_assessments"] = {
         "naming_quality": {"score": 82, "source": "holistic"}
     }
@@ -350,7 +354,7 @@ def test_resolve_non_review_issue_does_not_mark_stale():
         confidence="high",
         summary="unused name",
     )
-    state["issues"] = {issue["id"]: issue}
+    state["work_items"] = {issue["id"]: issue}
     state["subjective_assessments"] = {
         "naming_quality": {"score": 82, "source": "holistic"}
     }
@@ -380,7 +384,7 @@ def test_resolve_wontfix_captures_snapshot_metadata():
         summary="large module",
         detail={"loc": 210, "complexity_score": 42},
     )
-    state["issues"] = {issue["id"]: issue}
+    state["work_items"] = {issue["id"]: issue}
 
     resolution_mod.resolve_issues(
         state,
@@ -390,7 +394,7 @@ def test_resolve_wontfix_captures_snapshot_metadata():
         attestation="I have actually reviewed this and I am not gaming the score.",
     )
 
-    resolved = state["issues"][issue["id"]]
+    resolved = state["work_items"][issue["id"]]
     assert resolved["status"] == "wontfix"
     assert resolved["wontfix_scan_count"] == 17
     assert resolved["wontfix_snapshot"]["scan_count"] == 17
@@ -425,7 +429,7 @@ def test_resolve_stale_wontfix_refreshes_original_wontfix_snapshot():
         summary="stale wontfix",
         detail={"original_issue_id": original["id"], "reasons": ["scan_decay"]},
     )
-    state["issues"] = {
+    state["work_items"] = {
         original["id"]: original,
         stale["id"]: stale,
     }
@@ -438,7 +442,7 @@ def test_resolve_stale_wontfix_refreshes_original_wontfix_snapshot():
         attestation="I have actually re-reviewed this wontfix and I am not gaming the score.",
     )
 
-    refreshed = state["issues"][original["id"]]
+    refreshed = state["work_items"][original["id"]]
     assert refreshed["status"] == "wontfix"
     assert refreshed["wontfix_scan_count"] == 24
     assert refreshed["wontfix_snapshot"]["scan_count"] == 24
@@ -461,7 +465,7 @@ def test_resolve_open_reopens_non_open_issue_and_increments_reopen_count():
     issue["resolved_at"] = "2026-01-01T10:00:00+00:00"
     issue["note"] = "fixed earlier"
     issue["reopen_count"] = 2
-    state["issues"] = {issue["id"]: issue}
+    state["work_items"] = {issue["id"]: issue}
 
     resolved_ids = resolution_mod.resolve_issues(
         state,
@@ -472,7 +476,7 @@ def test_resolve_open_reopens_non_open_issue_and_increments_reopen_count():
     )
 
     assert resolved_ids == [issue["id"]]
-    reopened = state["issues"][issue["id"]]
+    reopened = state["work_items"][issue["id"]]
     assert reopened["status"] == "open"
     assert reopened["resolved_at"] is None
     assert reopened["note"] == "needs deeper fix"

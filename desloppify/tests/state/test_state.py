@@ -298,6 +298,16 @@ class TestLoadState:
         assert s["issues"]["x"]["origin"] == SCAN_ORIGIN
         validate_state_invariants(s)
 
+    def test_work_items_payload_gets_normalized(self, tmp_path):
+        p = tmp_path / "state.json"
+        p.write_text(
+            json.dumps({"version": 2, "work_items": {"x": {"id": "x", "tier": 3}}})
+        )
+        s = load_state(p)
+        assert s["issues"]["x"]["status"] == "open"
+        assert s["issues"]["x"]["work_item_kind"] == MECHANICAL_FINDING
+        validate_state_invariants(s)
+
     def test_corrupt_json_tries_backup(self, tmp_path):
         p = tmp_path / "state.json"
         p.write_text("{bad json!!")
@@ -345,6 +355,8 @@ class TestSaveState:
         assert p.exists()
         loaded = json.loads(p.read_text())
         assert loaded["version"] == CURRENT_VERSION
+        assert "work_items" in loaded
+        assert "issues" not in loaded
 
     def test_creates_backup_of_previous(self, tmp_path):
         p = tmp_path / "state.json"
@@ -376,6 +388,7 @@ class TestSaveState:
         loaded = json.loads(p.read_text())
         assert loaded["custom_set"] == [1, 2, 3]  # sorted
         assert loaded["custom_path"] == "/tmp/hello"
+        assert "work_items" in loaded
 
     def test_invalid_status_gets_normalized_before_save(self, tmp_path):
         p = tmp_path / "state.json"
@@ -384,7 +397,7 @@ class TestSaveState:
         ensure_state_defaults(st)
         save_state(st, p)
         loaded = json.loads(p.read_text())
-        assert loaded["issues"]["x"]["status"] == "open"
+        assert loaded["work_items"]["x"]["status"] == "open"
 
 
 # ---------------------------------------------------------------------------

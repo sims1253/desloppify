@@ -990,15 +990,17 @@ class TestReviewReminders:
     """Review-related reminders: pending issues + re-review needed."""
 
     def _base_state(self):
-        return {
-            "issues": {
-                "r1": {"status": "open", "detector": "review", "detail": {}},
-                "r2": {
-                    "status": "open",
-                    "detector": "review",
-                    "detail": {"investigation": "done"},
-                },
+        work_items = {
+            "r1": {"status": "open", "detector": "review", "detail": {}},
+            "r2": {
+                "status": "open",
+                "detector": "review",
+                "detail": {"investigation": "done"},
             },
+        }
+        return {
+            "work_items": work_items,
+            "issues": work_items,
             "reminder_history": {},
         }
 
@@ -1015,7 +1017,7 @@ class TestReviewReminders:
 
     def test_no_review_pending_when_all_investigated(self):
         state = self._base_state()
-        state["issues"]["r1"]["detail"]["investigation"] = "done too"
+        state["work_items"]["r1"]["detail"]["investigation"] = "done too"
         reminders, _ = compute_reminders(
             state, "typescript", "middle_grind", {}, [], {}, {}, "scan"
         )

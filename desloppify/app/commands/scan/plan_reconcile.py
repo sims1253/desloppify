@@ -403,7 +403,7 @@ def _has_postflight_review_work(
     *,
     policy,
 ) -> bool:
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     has_review_like_issue = any(
         isinstance(issue, dict)
         and issue.get("status") == "open"

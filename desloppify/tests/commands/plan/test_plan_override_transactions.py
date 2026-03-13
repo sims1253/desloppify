@@ -31,7 +31,7 @@ def _seed_state() -> tuple[dict, str]:
         summary="sample",
     )
     issue_id = issue["id"]
-    state["issues"][issue_id] = issue
+    state["work_items"][issue_id] = issue
     return state, issue_id
 
 

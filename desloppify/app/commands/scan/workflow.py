@@ -121,7 +121,7 @@ def _ensure_state_lang_capabilities(
 
 def _state_issues(state: StateModel) -> dict[str, dict[str, Any]]:
     """Return normalized issue map from state."""
-    issues = state.get("issues")
+    issues = state.get("work_items")
     if isinstance(issues, dict):
         return issues
     raise ScanStateContractError(

@@ -33,8 +33,10 @@ def _issue(
 
 
 def _state(issues: list[dict], *, dimension_scores: dict | None = None) -> dict:
+    work_items = {f["id"]: f for f in issues}
     return {
-        "issues": {f["id"]: f for f in issues},
+        "work_items": work_items,
+        "issues": work_items,
         "dimension_scores": dimension_scores or {},
     }
 
@@ -772,7 +774,7 @@ def test_evidence_only_issue_still_in_state():
     issues = [_issue("props::src/a.tsx::big", detector="props", confidence="low")]
     state = _state(issues)
     # Issue exists in state
-    assert "props::src/a.tsx::big" in state["issues"]
+    assert "props::src/a.tsx::big" in state["work_items"]
     # But not in queue
     queue = build_work_queue(state, count=None, include_subjective=False)
     assert len(queue["items"]) == 0

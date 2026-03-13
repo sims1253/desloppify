@@ -129,7 +129,7 @@ def build_issue_items(
     scope: str | None,
     chronic: bool,
 ) -> list[WorkQueueItem]:
-    scoped = path_scoped_issues(state.get("issues", {}), scan_path)
+    scoped = path_scoped_issues((state.get("work_items") or state.get("issues", {})), scan_path)
     subjective_scores = subjective_strict_scores(state)
     out: list[WorkQueueItem] = []
 

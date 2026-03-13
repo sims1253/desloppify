@@ -56,7 +56,7 @@ def _is_review_queue_id(issue_id: str, state: StateModel) -> bool:
 
     Falls back to legacy ID prefixes only when the issue payload is absent.
     """
-    issue = state.get("issues", {}).get(issue_id)
+    issue = (state.get("work_items") or state.get("issues", {})).get(issue_id)
     if isinstance(issue, dict):
         return is_triage_finding(issue)
     return issue_id.startswith("review::") or issue_id.startswith("concerns::")

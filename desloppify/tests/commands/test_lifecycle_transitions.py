@@ -77,8 +77,10 @@ def _build_state(
     overall_score: float | None = None,
     objective_score: float | None = None,
 ) -> dict:
+    work_items = {i["id"]: dict(i) for i in issues}
     state: dict = {
-        "issues": {i["id"]: dict(i) for i in issues},
+        "work_items": work_items,
+        "issues": work_items,
         "scan_count": 1,
         "dimension_scores": {},
         "subjective_assessments": {},
@@ -137,9 +139,11 @@ def _complete_endgame_subjective_reruns(state: dict) -> None:
 
 def _add_review_issues(state: dict) -> None:
     """Mutate state in place: add review detector issues that trigger triage."""
+    work_items = state.setdefault("work_items", state.get("issues", {}))
+    state["issues"] = work_items
     for key in ("naming_quality", "logic_clarity"):
         fid = f"review-{key}"
-        state["issues"][fid] = {
+        work_items[fid] = {
             "id": fid, "detector": "review", "file": "src/app.py",
             "status": "open", "detail": {"dimension": key},
         }
@@ -219,8 +223,8 @@ class TestScanAfterReviewsInjectsWorkflow:
 
         # After completing objectives, postflight sequence begins.
         # Subjective reruns come before workflow items in the lifecycle.
-        state["issues"]["obj-1"]["status"] = "fixed"
-        state["issues"]["obj-2"]["status"] = "fixed"
+        state["work_items"]["obj-1"]["status"] = "fixed"
+        state["work_items"]["obj-2"]["status"] = "fixed"
         ids = _queue_ids(state, plan)
         # Subjective reruns visible first (stale assessments)
         assert any(fid.startswith("subjective::") for fid in ids), f"Expected subjective: {ids}"
@@ -302,8 +306,8 @@ class TestTriageInjectedOnScan:
 
         # Once objective queue drains, lifecycle enters postflight.
         # Review issues are non-objective, but they stay behind triage.
-        state["issues"]["obj-1"]["status"] = "fixed"
-        state["issues"]["obj-2"]["status"] = "fixed"
+        state["work_items"]["obj-1"]["status"] = "fixed"
+        state["work_items"]["obj-2"]["status"] = "fixed"
         ids = _queue_ids(state, plan)
         # Subjective reruns surface first.
         assert any(fid.startswith("subjective::") for fid in ids), ids
@@ -322,7 +326,7 @@ class TestTriageInjectedOnScan:
 
         # After triage completes for the live review issue set, the findings surface.
         plan.setdefault("epic_triage_meta", {})["triaged_ids"] = sorted(
-            fid for fid in state["issues"] if state["issues"][fid].get("detector") == "review"
+            fid for fid in state["work_items"] if state["work_items"][fid].get("detector") == "review"
         )
         purge_ids(plan, TRIAGE_STAGE_IDS)
         ids = _queue_ids(state, plan)
@@ -364,8 +368,8 @@ class TestFullLifecycleGoldenPath:
         assert WORKFLOW_COMMUNICATE_SCORE_ID not in ids, f"Scan 2: {ids}"
 
         # ── Between scans: complete objectives to unlock postflight ──
-        state["issues"]["obj-1"]["status"] = "fixed"
-        state["issues"]["obj-2"]["status"] = "fixed"
+        state["work_items"]["obj-1"]["status"] = "fixed"
+        state["work_items"]["obj-2"]["status"] = "fixed"
         ids = _queue_ids(state, plan)
         # Subjective reruns come first in postflight
         assert any(fid.startswith("subjective::") for fid in ids), f"Post-objectives: {ids}"
@@ -382,8 +386,8 @@ class TestFullLifecycleGoldenPath:
         assert not any(fid.startswith("workflow::") for fid in ids), f"Post-workflow: {ids}"
 
         # ── Scan 3: add review issues + reopen objectives for mid-cycle test ──
-        state["issues"]["obj-1"]["status"] = "open"
-        state["issues"]["obj-2"]["status"] = "open"
+        state["work_items"]["obj-1"]["status"] = "open"
+        state["work_items"]["obj-2"]["status"] = "open"
         _add_review_issues(state)
         plan = _reconcile(state, plan, monkeypatch)
         ids = _queue_ids(state, plan)
@@ -397,8 +401,8 @@ class TestFullLifecycleGoldenPath:
 
         # ── Complete objective queue → rescan injects triage in plan, but
         #    postflight still starts with workflow items ──
-        state["issues"]["obj-1"]["status"] = "fixed"
-        state["issues"]["obj-2"]["status"] = "fixed"
+        state["work_items"]["obj-1"]["status"] = "fixed"
+        state["work_items"]["obj-2"]["status"] = "fixed"
         plan = _reconcile(state, plan, monkeypatch)
         ids = _queue_ids(state, plan)
         workflow_ids = [fid for fid in ids if fid.startswith("workflow::")]
@@ -415,7 +419,7 @@ class TestFullLifecycleGoldenPath:
 
         # ── Complete triage → review findings finally become executable ──
         plan.setdefault("epic_triage_meta", {})["triaged_ids"] = sorted(
-            fid for fid in state["issues"] if state["issues"][fid].get("detector") == "review"
+            fid for fid in state["work_items"] if state["work_items"][fid].get("detector") == "review"
         )
         purge_ids(plan, list(TRIAGE_STAGE_IDS))
         ids = _queue_ids(state, plan)

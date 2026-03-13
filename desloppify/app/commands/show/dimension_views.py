@@ -27,7 +27,7 @@ def _print_dimension_score(dim_data: dict, display_name: str) -> None:
 
 
 def _render_judgment(state: dict, dimension_key: str) -> None:
-    """Print judgment narrative (strengths, issue_character, score_rationale) if available."""
+    """Print judgment narrative (strengths, dimension_character, score_rationale) if available."""
     assessments = state.get("subjective_assessments", {})
     assessment = assessments.get(dimension_key, {})
     if not isinstance(assessment, dict):
@@ -49,10 +49,6 @@ def _render_judgment(state: dict, dimension_key: str) -> None:
     dim_char = judgment.get("dimension_character", "")
     if dim_char:
         print(colorize(f"  Dimension character: {dim_char}", "dim"))
-    else:
-        issue_character = judgment.get("issue_character", "")
-        if issue_character:
-            print(colorize(f"  Issue character: {issue_character}", "dim"))
 
 
 def _render_subjective_dimension(
@@ -75,7 +71,7 @@ def _render_subjective_dimension(
     )
     dim_reviews = [
         issue
-        for issue in (state.get("issues") or {}).values()
+        for issue in (state.get("work_items") or {}).values()
         if is_triage_finding(issue)
         and issue.get("status") == "open"
         and lowered

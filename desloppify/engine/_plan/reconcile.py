@@ -22,7 +22,7 @@ from desloppify.engine._plan.schema import (
     ensure_plan_defaults,
 )
 from desloppify.engine._plan.skip_policy import skip_kind_state_status
-from desloppify.engine._state.schema import StateModel, utc_now
+from desloppify.engine._state.schema import StateModel, ensure_state_defaults, utc_now
 
 SUPERSEDED_TTL_DAYS = 90
 
@@ -43,7 +43,7 @@ def _find_candidates(
 ) -> list[str]:
     """Find alive issues that could be remaps for a disappeared issue."""
     candidates: list[str] = []
-    for fid, issue in state.get("issues", {}).items():
+    for fid, issue in (state.get("work_items") or state.get("issues", {})).items():
         if issue.get("status") not in _ALIVE_STATUSES:
             continue
         if issue.get("detector") == detector and issue.get("file") == file:
@@ -56,7 +56,7 @@ _ALIVE_STATUSES = frozenset({"open", "deferred", "triaged_out"})
 
 def _is_issue_alive(state: StateModel, issue_id: str) -> bool:
     """Return True if the issue exists and is actionable (open/deferred/triaged_out)."""
-    issue = state.get("issues", {}).get(issue_id)
+    issue = (state.get("work_items") or state.get("issues", {})).get(issue_id)
     if issue is None:
         return False
     return issue.get("status") in _ALIVE_STATUSES
@@ -69,7 +69,7 @@ def _supersede_id(
     now: str,
 ) -> bool:
     """Move a disappeared issue to superseded. Returns True if changed."""
-    issue = state.get("issues", {}).get(issue_id)
+    issue = (state.get("work_items") or state.get("issues", {})).get(issue_id)
     detector = ""
     file = ""
     summary = ""
@@ -231,7 +231,7 @@ def _sync_skipped_issue_statuses(plan: PlanModel, state: StateModel) -> None:
     Runs on every reconcile so existing data gets migrated on next scan.
     """
     skipped = plan.get("skipped", {})
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     for fid, entry in skipped.items():
         issue = issues.get(fid)
         if issue is None or issue.get("status") != "open":
@@ -252,6 +252,7 @@ def reconcile_plan_after_scan(
     open, moves them to superseded, and prunes old superseded entries.
     """
     ensure_plan_defaults(plan)
+    ensure_state_defaults(state)
     result = ReconcileResult()
     now = utc_now()
     now_dt = datetime.now(UTC)
@@ -291,7 +292,7 @@ def reconcile_plan_after_scan(
         result.resurfaced = resurfaced
         result.changes += len(resurfaced)
         # Reopen resurfaced issues in state (they were deferred)
-        issues = state.get("issues", {})
+        issues = (state.get("work_items") or state.get("issues", {}))
         for fid in resurfaced:
             issue = issues.get(fid)
             if issue and issue.get("status") == "deferred":

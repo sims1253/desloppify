@@ -358,7 +358,7 @@ def cmd_plan_backlog(args: argparse.Namespace) -> None:
     # so they don't get stranded with a non-open status while untracked by plan.
     _BACKLOG_REOPEN_STATUSES = {"deferred", "triaged_out"}
     state_data = state_mod.load_state(state_file)
-    issues = state_data.get("issues", {})
+    issues = state_data.get("work_items", {})
     reopen_ids = [
         fid for fid in removed
         if issues.get(fid, {}).get("status") in _BACKLOG_REOPEN_STATUSES

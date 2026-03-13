@@ -337,16 +337,26 @@ def executable_objective_ids(
     if not isinstance(plan, dict):
         return set(all_objective_ids)
     tracked_ids = _tracked_plan_ids(plan)
-    if not tracked_ids:
-        return set(all_objective_ids)
     skipped_ids = set(plan.get("skipped", {}).keys())
+    tracked_objective_ids = tracked_ids & set(all_objective_ids)
     queued_ids = {
         issue_id
         for issue_id in plan.get("queue_order", [])
         if issue_id not in skipped_ids
         and not any(issue_id.startswith(prefix) for prefix in SYNTHETIC_PREFIXES)
     }
-    return all_objective_ids & queued_ids
+    has_active_plan_structure = bool(
+        plan.get("queue_order") or plan.get("clusters") or plan.get("overrides")
+    )
+    if not tracked_ids:
+        return set(all_objective_ids) - skipped_ids
+    if not tracked_objective_ids:
+        return set(all_objective_ids) - skipped_ids
+    if queued_ids:
+        return all_objective_ids & queued_ids
+    if not has_active_plan_structure:
+        return set(all_objective_ids) - skipped_ids
+    return set()
 
 
 def validate_plan(plan: dict[str, Any]) -> None:

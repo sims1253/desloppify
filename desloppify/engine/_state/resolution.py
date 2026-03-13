@@ -104,7 +104,7 @@ def match_issues(
     ensure_state_defaults(state)
     return [
         issue
-        for issue_id, issue in state["issues"].items()
+        for issue_id, issue in state["work_items"].items()
         if not issue.get("suppressed")
         if (status_filter == "all" or issue["status"] == status_filter)
         and _matches_pattern(issue_id, issue, pattern)
@@ -133,7 +133,7 @@ def resolve_issues(
         original_issue_id = detail.get("original_issue_id")
         if not isinstance(original_issue_id, str) or not original_issue_id:
             return
-        original = state["issues"].get(original_issue_id)
+        original = state["work_items"].get(original_issue_id)
         if not isinstance(original, dict) or original.get("status") != "wontfix":
             return
         snapshot_scan_count = int(state.get("scan_count", 0) or 0)

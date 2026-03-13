@@ -584,6 +584,7 @@ def test_pending_import_scores_meta_ignores_malformed_refresh_state() -> None:
                 "timestamp": "2026-03-10T10:00:00+00:00",
                 "mode": "issues_only",
                 "import_file": "/tmp/review.json",
+                "packet_sha256": "hash-from-audit",
             }
         ]
     }
@@ -592,6 +593,7 @@ def test_pending_import_scores_meta_ignores_malformed_refresh_state() -> None:
 
     assert meta is not None
     assert meta.import_file == "/tmp/review.json"
+    assert meta.packet_sha256 == "hash-from-audit"
 
 
 def test_sync_communicate_score_reinjects_after_trusted_score_import() -> None:

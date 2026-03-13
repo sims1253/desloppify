@@ -12,6 +12,7 @@ from desloppify.engine._plan.constants import (
     WORKFLOW_RUN_SCAN_ID,
 )
 from desloppify.engine._plan.schema import (
+    _tracked_plan_ids as _tracked_plan_ids,
     executable_objective_ids as _executable_objective_ids,
 )
 from desloppify.engine._plan.triage.snapshot import build_triage_snapshot
@@ -194,6 +195,7 @@ def _phase_for_snapshot(
     *,
     fresh_boundary: bool,
     initial_review_items: list[WorkQueueItem],
+    anchored_execution_items: list[WorkQueueItem],
     explicit_queue_items: list[WorkQueueItem],
     scan_items: list[WorkQueueItem],
     postflight_review_items: list[WorkQueueItem],
@@ -202,10 +204,12 @@ def _phase_for_snapshot(
 ) -> str:
     if fresh_boundary and initial_review_items:
         return PHASE_REVIEW_INITIAL
-    if explicit_queue_items:
+    if anchored_execution_items:
         return PHASE_EXECUTE
     if scan_items:
         return PHASE_SCAN
+    if explicit_queue_items:
+        return PHASE_EXECUTE
     if postflight_review_items:
         return PHASE_REVIEW_POSTFLIGHT
     if postflight_workflow_items:
@@ -263,7 +267,7 @@ def build_queue_snapshot(
     )
     scan_path = _resolved_scan_path(options, state)
     skipped_ids = set((effective_plan or {}).get("skipped", {}).keys())
-    scoped_issues = path_scoped_issues(state.get("issues", {}), scan_path)
+    scoped_issues = path_scoped_issues((state.get("work_items") or state.get("issues", {})), scan_path)
     scope = _option_value(options, "scope", None)
     chronic = bool(_option_value(options, "chronic", False))
 
@@ -295,12 +299,14 @@ def build_queue_snapshot(
     )
     review_issue_ids = {item.get("id", "") for item in review_issue_items}
     executable_review_ids = {item.get("id", "") for item in executable_review_items}
+    review_request_ids = {item.get("id", "") for item in review_request_items}
     explicit_queue_ids = {
         str(issue_id)
         for issue_id in (effective_plan or {}).get("queue_order", [])
         if isinstance(issue_id, str) and issue_id
     } - skipped_ids
-    explicit_queue_ids |= _auto_promoted_autofix_ids(effective_plan)
+    auto_promoted_ids = _auto_promoted_autofix_ids(effective_plan)
+    explicit_queue_ids |= auto_promoted_ids
     queued_extra_items = [
         item for item in all_issue_items
         if item.get("id", "") in explicit_queue_ids
@@ -308,6 +314,8 @@ def build_queue_snapshot(
             item.get("id", "") not in review_issue_ids
             or item.get("id", "") in executable_review_ids
         )
+        and item.get("id", "") not in review_issue_ids
+        and item.get("id", "") not in review_request_ids
     ]
     explicit_queue_items: list[WorkQueueItem] = []
     seen_execution_ids: set[str] = set()
@@ -317,6 +325,11 @@ def build_queue_snapshot(
             continue
         seen_execution_ids.add(item_id)
         explicit_queue_items.append(item)
+    anchored_execution_ids = (_tracked_plan_ids(effective_plan) | auto_promoted_ids) - skipped_ids
+    anchored_execution_items = [
+        item for item in explicit_queue_items
+        if item.get("id", "") in anchored_execution_ids
+    ]
     initial_review_items, subjective_postflight_items = _subjective_partitions(
         state,
         scoped_issues=scoped_issues,
@@ -336,6 +349,7 @@ def build_queue_snapshot(
     phase = _phase_for_snapshot(
         fresh_boundary=fresh_boundary,
         initial_review_items=initial_review_items,
+        anchored_execution_items=anchored_execution_items,
         explicit_queue_items=explicit_queue_items,
         scan_items=scan_items,
         postflight_review_items=postflight_review_items,

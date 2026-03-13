@@ -131,14 +131,14 @@ class TestMergeScan:
         diff = merge_scan(state, issues, MergeScanOptions(lang="python"))
         assert diff["new"] == 1
         assert diff["total_current"] == 1
-        assert "smells::foo.py::debug_tag" in state["issues"]
+        assert "smells::foo.py::debug_tag" in state["work_items"]
 
     @patch.object(merge_mod, "_recompute_stats")
     def test_merge_keeps_disappeared_open_issue_open(self, mock_recompute):
         """Old open issues not in current scan stay open until manually resolved."""
         mock_recompute.return_value = None
         state = self._make_state()
-        state["issues"]["smells::old.py::leftover"] = {
+        state["work_items"]["smells::old.py::leftover"] = {
             "id": "smells::old.py::leftover",
             "detector": "smells",
             "file": "old.py",
@@ -158,7 +158,7 @@ class TestMergeScan:
             state, [], MergeScanOptions(lang="python", force_resolve=True)
         )
         assert diff["auto_resolved"] == 0
-        assert state["issues"]["smells::old.py::leftover"]["status"] == "open"
+        assert state["work_items"]["smells::old.py::leftover"]["status"] == "open"
 
     @patch.object(merge_mod, "_recompute_stats")
     def test_merge_with_ignore_patterns(self, mock_recompute):
@@ -190,7 +190,7 @@ class TestMergeScan:
         assert diff["ignored"] == 1
         assert diff["raw_issues"] == 1
         # Issue is inserted but suppressed:
-        f = state["issues"]["smells::vendor/lib.py::debug"]
+        f = state["work_items"]["smells::vendor/lib.py::debug"]
         assert f["suppressed"] is True
 
     @patch.object(merge_mod, "_recompute_stats")

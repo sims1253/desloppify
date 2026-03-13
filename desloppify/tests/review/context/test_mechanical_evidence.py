@@ -589,7 +589,7 @@ class TestMechanicalStaleness:
 
         # Manually resolve the issue so verify_disappeared will process it
         # (open issues are now user-controlled and skip verification)
-        state["issues"]["structural::big.py::large_file"]["status"] = "fixed"
+        state["work_items"]["structural::big.py::large_file"]["status"] = "fixed"
 
         # Second scan: structural issue absent → scan-verified, detector changed
         merge_scan(state, [], MergeScanOptions(force_resolve=True))

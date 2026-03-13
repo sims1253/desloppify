@@ -117,7 +117,6 @@ def _validate_dimension_judgment(
         require_complete=require_complete,
     )
 
-    # Accept dimension_character (new) or issue_character (legacy)
     dimension_character = _normalize_dimension_judgment_text(
         key,
         raw.get("dimension_character"),
@@ -132,10 +131,10 @@ def _validate_dimension_judgment(
         require_complete=False,
         log_fn=log_fn,
     )
-    # Require at least one character field when completeness is required
-    if require_complete and not dimension_character and not issue_character:
+    effective_dimension_character = dimension_character or issue_character
+    if require_complete and not effective_dimension_character:
         raise ValueError(
-            f"dimension_judgment.{key} must include dimension_character or issue_character"
+            f"dimension_judgment.{key} must include dimension_character"
         )
 
     score_rationale = _normalize_dimension_judgment_text(
@@ -147,16 +146,14 @@ def _validate_dimension_judgment(
         min_length=50,
     )
 
-    if not dimension_character and not issue_character and not score_rationale and not strengths:
+    if not effective_dimension_character and not score_rationale and not strengths:
         return None
 
     result: BatchDimensionJudgmentPayload = {}
     if strengths:
         result["strengths"] = strengths
-    if dimension_character:
-        result["dimension_character"] = dimension_character
-    if issue_character:
-        result["issue_character"] = issue_character
+    if effective_dimension_character:
+        result["dimension_character"] = effective_dimension_character
     if score_rationale:
         result["score_rationale"] = score_rationale
     return result
@@ -198,8 +195,8 @@ def _normalize_dimension_judgment_text(
         log_fn(f"  dimension_judgment.{key}.{field_name}: missing or empty")
         return ""
     if min_length is not None and len(value) < min_length:
-        log_fn(
-            f"  dimension_judgment.{key}.{field_name}: "
+        raise ValueError(
+            f"dimension_judgment.{key}.{field_name}: "
             f"too short ({len(value)} chars, want ≥{min_length})"
         )
     return value
@@ -531,7 +528,7 @@ def _normalize_dimension_judgments(
         )
         if validated is None:
             raise ValueError(
-                f"dimension_judgment.{key} must include dimension_character (or issue_character) and score_rationale"
+                f"dimension_judgment.{key} must include dimension_character and score_rationale"
             )
         dimension_judgment[key] = validated
     return dimension_judgment

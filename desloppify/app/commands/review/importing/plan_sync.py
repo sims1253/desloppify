@@ -76,7 +76,7 @@ class _PlanImportMutations:
 
 
 def _has_postflight_review_work(state: dict, *, policy) -> bool:
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     if any(
         isinstance(issue, dict)
         and issue.get("status") == "open"
@@ -142,7 +142,7 @@ def _print_new_review_items(state: dict, new_ids: list[str]) -> None:
         f"  Plan updated: {len(new_ids)} new review issue(s) added to queue.",
         "bold",
     ))
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     for finding_id in sorted(new_ids)[:10]:
         finding = issues.get(finding_id, {})
         print(f"    * [{short_issue_id(finding_id)}] {finding.get('summary', '')}")

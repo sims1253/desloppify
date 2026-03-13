@@ -273,7 +273,7 @@ def history_for_lang(raw_history: list[dict], lang: str | None) -> list[dict]:
 
 def scoped_issues(state: StateModel) -> dict[str, Issue]:
     return path_scoped_issues(
-        state.get("issues", {}), state.get("scan_path")
+        (state.get("work_items") or state.get("issues", {})), state.get("scan_path")
     )
 
 

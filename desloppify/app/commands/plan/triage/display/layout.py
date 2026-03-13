@@ -289,7 +289,7 @@ def show_plan_summary(plan: dict, state: dict) -> None:
         for name, cluster in clusters.items()
         if cluster_issue_ids(cluster) and not cluster.get("auto")
     }
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
 
     if active:
         print(colorize(f"\n  Clusters ({len(active)}):", "bold"))

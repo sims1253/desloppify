@@ -157,7 +157,7 @@ def auto_cluster_issues(
     """
     ensure_plan_defaults(plan)
 
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     clusters = plan.get("clusters", {})
 
     now = utc_now()

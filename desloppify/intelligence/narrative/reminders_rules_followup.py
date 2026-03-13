@@ -77,9 +77,10 @@ def _review_queue_reminders(
 
 def _has_open_issues(state: StateModel) -> bool:
     """True when any non-suppressed open issues remain in the queue."""
+    issues = state.get("work_items") or state.get("issues", {})
     return any(
         issue.get("status") == "open" and not issue.get("suppressed")
-        for issue in (state.get("issues") or {}).values()
+        for issue in issues.values()
     )
 
 

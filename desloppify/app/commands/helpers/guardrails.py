@@ -119,7 +119,7 @@ def require_triage_current_or_exit(
     ]
     if new_ids:
         for fid in sorted(new_ids)[:5]:
-            issue = state.get("issues", {}).get(fid, {})
+            issue = (state.get("work_items") or state.get("issues", {})).get(fid, {})
             lines.append(f"    * [{short_issue_id(fid)}] {issue.get('summary', '')}")
         if len(new_ids) > 5:
             lines.append(f"    ... and {len(new_ids) - 5} more")

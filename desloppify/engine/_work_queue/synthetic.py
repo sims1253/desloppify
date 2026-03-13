@@ -127,7 +127,7 @@ def build_triage_stage_items(plan: dict, state: dict) -> list[WorkQueueItem]:
     if not present_names:
         return []
 
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     open_review_count = sum(
         1 for f in issues.values()
         if f.get("status") == "open"

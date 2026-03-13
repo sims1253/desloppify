@@ -20,7 +20,7 @@ _CLUSTER_INDIVIDUAL_THRESHOLD = 10
 def check_cluster_guard(patterns: list[str], plan: dict, state: dict) -> bool:
     """Return True if blocked by cluster guard, False if OK to proceed."""
     clusters = plan.get("clusters", {})
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     for pattern in patterns:
         if pattern in clusters:
             cluster = clusters[pattern]
@@ -45,7 +45,7 @@ def check_cluster_guard(patterns: list[str], plan: dict, state: dict) -> bool:
 
 
 def print_cluster_guard(cluster_name: str, issue_ids: list[str], state: dict) -> None:
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     print(
         colorize(
             f"\n  Cluster '{cluster_name}' has {len(issue_ids)} item(s) — mark them done individually first:\n",

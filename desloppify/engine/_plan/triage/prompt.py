@@ -181,7 +181,7 @@ def _recent_completed_clusters(meta: dict, plan: PlanModel) -> list[dict]:
 def collect_triage_input(plan: PlanModel, state: StateModel) -> TriageInput:
     """Gather all data needed for the triage LLM prompt."""
     ensure_plan_defaults(plan)
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     meta = plan.get("epic_triage_meta", {})
     epics = triage_clusters(plan)
     auto_clusters = {

@@ -48,6 +48,12 @@ _EXCLUDED_ZONE_OVERRIDES: dict[str, frozenset[str]] = {
     "security": SECURITY_EXCLUDED_ZONES,
 }
 
+# Legacy test/import surface for code that still expects subjective detectors
+# to be grouped in scoring core.
+_NON_OBJECTIVE_DETECTORS = frozenset(
+    {"review", "concerns", "subjective_review", "subjective_assessment"}
+)
+
 
 def _build_builtin_detector_scoring_policies() -> dict[str, DetectorScoringPolicy]:
     """Build baseline scoring policies from DetectorMeta plus policy overrides."""

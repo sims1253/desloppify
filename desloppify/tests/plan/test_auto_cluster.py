@@ -50,7 +50,7 @@ def _state_with(*issues: dict) -> dict:
     fmap = {}
     for f in issues:
         fmap[f["id"]] = f
-    return {"issues": fmap, "scan_count": 5}
+    return {"work_items": fmap, "issues": fmap, "scan_count": 5}
 
 
 # ---------------------------------------------------------------------------
@@ -1150,7 +1150,7 @@ def test_judgment_required_issues_still_in_state():
 
     auto_cluster_issues(plan, state)
     # smells issues still exist in state
-    assert "s1" in state["issues"]
-    assert "s2" in state["issues"]
+    assert "s1" in state["work_items"]
+    assert "s2" in state["work_items"]
     # unused auto-clusters normally
     assert "auto/unused" in plan["clusters"]

@@ -96,7 +96,7 @@ def unclustered_review_issues(plan: dict, state: dict | None = None) -> list[str
 
     if state is not None:
         review_ids = [
-            fid for fid, finding in state.get("issues", {}).items()
+            fid for fid, finding in (state.get("work_items") or state.get("issues", {})).items()
             if finding.get("status") == "open"
             and is_triage_finding(finding)
         ]

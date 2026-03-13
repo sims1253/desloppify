@@ -97,7 +97,7 @@ def build_review_context_inner(
         for filepath in file_contents
         if isinstance(filepath, str) and filepath
     }
-    issues = state.get("issues", {})
+    issues = (state.get("work_items") or state.get("issues", {}))
     by_file: dict[str, list[str]] = {}
     for issue in issues.values():
         if issue.get("status") != "open":

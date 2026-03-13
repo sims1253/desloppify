@@ -114,12 +114,12 @@ def remove_ignored_issues(state: StateModel, pattern: str) -> int:
     ensure_state_defaults(state)
     matched_ids = [
         issue_id
-        for issue_id, issue in state["issues"].items()
+        for issue_id, issue in state["work_items"].items()
         if is_ignored(issue_id, issue["file"], [pattern])
     ]
     now = utc_now()
     for issue_id in matched_ids:
-        issue = state["issues"][issue_id]
+        issue = state["work_items"][issue_id]
         issue["suppressed"] = True
         issue["suppressed_at"] = now
         issue["suppression_pattern"] = pattern

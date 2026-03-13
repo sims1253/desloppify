@@ -14,7 +14,7 @@ def open_review_ids(state: StateModel) -> set[str]:
     """Return IDs of open review/concerns issues from state."""
     return {
         fid
-        for fid, f in state.get("issues", {}).items()
+        for fid, f in (state.get("work_items") or state.get("issues", {})).items()
         if f.get("status") == "open" and is_triage_finding(f)
     }
 
