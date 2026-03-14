@@ -5,6 +5,13 @@ from desloppify.languages._framework.generic_support.core import generic_lang
 from desloppify.languages._framework.treesitter import R_SPEC
 from desloppify.languages.r.phases_smells import phase_smells
 from desloppify.languages.r import test_coverage as r_test_coverage_hooks
+from desloppify.languages.r.review import (
+    HOLISTIC_REVIEW_DIMENSIONS,
+    LOW_VALUE_PATTERN,
+    REVIEW_GUIDANCE,
+    api_surface,
+    module_patterns,
+)
 
 generic_lang(
     name="r",
@@ -38,6 +45,13 @@ generic_lang(
         DetectorPhase("R code smells", phase_smells),
     ],
     test_coverage_module=r_test_coverage_hooks,
+    review={
+        "holistic_review_dimensions": HOLISTIC_REVIEW_DIMENSIONS,
+        "review_guidance": REVIEW_GUIDANCE,
+        "review_low_value_pattern": LOW_VALUE_PATTERN,
+        "review_module_patterns_fn": module_patterns,
+        "review_api_surface_fn": api_surface,
+    },
 )
 
 __all__ = [
