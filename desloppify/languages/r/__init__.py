@@ -1,4 +1,4 @@
-"""R language plugin — lintr + tree-sitter."""
+"""R language plugin — Jarl, lintr + tree-sitter."""
 
 from desloppify.languages._framework.generic_support.core import generic_lang
 from desloppify.languages._framework.treesitter import R_SPEC
@@ -8,6 +8,14 @@ generic_lang(
     extensions=[".R", ".r"],
     tools=[
         {
+            "label": "jarl",
+            "cmd": "jarl check .",
+            "fmt": "gnu",
+            "id": "jarl_lint",
+            "tier": 2,
+            "fix_cmd": "jarl check . --fix --allow-dirty",
+        },
+        {
             "label": "lintr",
             "cmd": (
                 'Rscript -e \'cat(paste(capture.output('
@@ -16,7 +24,7 @@ generic_lang(
             ),
             "fmt": "gnu",
             "id": "lintr_lint",
-            "tier": 2,
+            "tier": 3,
             "fix_cmd": None,
         },
     ],
