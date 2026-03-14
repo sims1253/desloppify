@@ -240,22 +240,90 @@ def resolve_perl_import(import_text: str, source_file: str, scan_path: str) -> s
     return None
 
 
+_DESCRIPTION_CACHE: dict[str, tuple[str, list[str], list[str]]] = {}
+
+
 def resolve_r_import(import_text: str, source_file: str, scan_path: str) -> str | None:
-    """Resolve R source() calls to local scripts."""
+    """Resolve R source() calls and library()/require() to local files."""
     if not import_text:
         return None
 
     text = import_text.strip("\"'")
-    if not text.endswith((".R", ".r")):
-        return None
 
-    base = os.path.dirname(source_file)
-    candidate = os.path.normpath(os.path.join(base, text))
-    if os.path.isfile(candidate):
-        return candidate
-
-    for src_root in [".", "R"]:
-        candidate = os.path.join(scan_path, src_root, text)
+    # Try source() resolution (local file paths).
+    if text.endswith((".R", ".r")):
+        base = os.path.dirname(source_file)
+        candidate = os.path.normpath(os.path.join(base, text))
         if os.path.isfile(candidate):
             return candidate
+
+        for src_root in [".", "R"]:
+            candidate = os.path.join(scan_path, src_root, text)
+            if os.path.isfile(candidate):
+                return candidate
+
+    # Try package dependency resolution for library()/require() calls.
+    # Maps package name to R/<pkg>.R if the package is listed in DESCRIPTION.
+    normalized_scan = os.path.normpath(scan_path)
+    cached = _DESCRIPTION_CACHE.get(normalized_scan)
+    if cached is None:
+        desc_path = os.path.join(scan_path, "DESCRIPTION")
+        if os.path.isfile(desc_path):
+            cached = _parse_description_deps(desc_path)
+            _DESCRIPTION_CACHE[normalized_scan] = cached
+        else:
+            _DESCRIPTION_CACHE[normalized_scan] = ("", [], [])
+            cached = ("", [], [])
+
+    pkg_name, _, _ = cached
+    if pkg_name and text == pkg_name:
+        for ext in (".R", ".r"):
+            candidate = os.path.join(scan_path, "R", text + ext)
+            if os.path.isfile(candidate):
+                return candidate
+
+    # Try R/ directory lookup for any import name matching a file.
+    for ext in (".R", ".r"):
+        candidate = os.path.join(scan_path, "R", text + ext)
+        if os.path.isfile(candidate):
+            return candidate
+
     return None
+
+
+def _parse_description_deps(desc_path: str) -> tuple[str, list[str], list[str]]:
+    """Parse DESCRIPTION for Package name, Imports, and Depends lists."""
+    try:
+        with open(desc_path, encoding="utf-8") as f:
+            content = f.read()
+    except (OSError, UnicodeDecodeError):
+        return ("", [], [])
+
+    name = ""
+    imports: list[str] = []
+    depends: list[str] = []
+
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("Package:") and ":" in stripped:
+            name = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("Imports:") and ":" in stripped:
+            imports = [
+                _strip_version(p.strip())
+                for p in stripped.split(":", 1)[1].split(",")
+                if p.strip() and _strip_version(p.strip())
+            ]
+        elif stripped.startswith("Depends:") and ":" in stripped:
+            depends = [
+                _strip_version(p.strip())
+                for p in stripped.split(":", 1)[1].split(",")
+                if p.strip() and _strip_version(p.strip())
+            ]
+
+    return (name, imports, depends)
+
+
+def _strip_version(name: str) -> str:
+    """Strip version condition from package name."""
+    idx = name.find("(")
+    return name[:idx].strip() if idx >= 0 else name
