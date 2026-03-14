@@ -4,6 +4,7 @@ from desloppify.languages._framework.base.types import DetectorPhase
 from desloppify.languages._framework.generic_support.core import generic_lang
 from desloppify.languages._framework.treesitter import R_SPEC
 from desloppify.languages.r.phases_smells import phase_smells
+from desloppify.languages.r import test_coverage as r_test_coverage_hooks
 
 generic_lang(
     name="r",
@@ -30,6 +31,7 @@ generic_lang(
     custom_phases=[
         DetectorPhase("R code smells", phase_smells),
     ],
+    test_coverage_module=r_test_coverage_hooks,
 )
 
 __all__ = [
