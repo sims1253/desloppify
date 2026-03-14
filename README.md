@@ -69,6 +69,6 @@ If you'd like to join a community of vibe engineers who want to build beautiful 
 
 ---
 
-Issues, improvements, and PRs are hugely appreciated — [github.com/peteromallet/desloppify](https://github.com/peteromallet/desloppify).
+Issues, improvements, and PRs are hugely appreciated — [github.com/sims1253/desloppify](https://github.com/sims1253/desloppify).
 
 MIT License
