@@ -226,7 +226,7 @@ When desloppify itself appears wrong or inconsistent — a bug, a bad detection,
 Clone the tool repo to a temp directory, make the fix there, and verify it works against the project you're scanning before pushing.
 
 ```bash
-git clone https://github.com/peteromallet/desloppify.git /tmp/desloppify-fix
+git clone https://github.com/sims1253/desloppify.git /tmp/desloppify-fix
 cd /tmp/desloppify-fix
 git checkout -b fix/<short-description>
 ```
@@ -257,10 +257,10 @@ Clean up after: `rm -rf /tmp/desloppify-fix`
 
 ### File an issue (fallback)
 
-If the fix is unclear or the change needs discussion, open an issue at `https://github.com/peteromallet/desloppify/issues` with a minimal repro: command, path, expected output, actual output.
+If the fix is unclear or the change needs discussion, open an issue at `https://github.com/sims1253/desloppify/issues` with a minimal repro: command, path, expected output, actual output.
 
 ## Prerequisite
 
-`command -v desloppify >/dev/null 2>&1 && echo "desloppify: installed" || echo "NOT INSTALLED — run: pip install --upgrade git+https://github.com/peteromallet/desloppify.git"`
+`command -v desloppify >/dev/null 2>&1 && echo "desloppify: installed" || echo "NOT INSTALLED — run: uv tool install git+https://github.com/sims1253/desloppify.git"`
 
 <!-- desloppify-end -->
