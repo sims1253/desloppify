@@ -15,6 +15,8 @@ _LIBRARY_IN_FN_RE = re.compile(
     r"(?<!\w)(?:library|require)\s*\(",
 )
 _LIBRARY_IN_FN_CHECK_ID = "library_in_function"
+_LOWERCASE_EXT_CHECK_ID = "lowercase_r_extension"
+_UNNECESSARY_RETURN_CHECK_ID = "unnecessary_return"
 
 
 def _strip_r_comments(content: str) -> str:
@@ -54,6 +56,8 @@ def detect_smells(path: Path) -> tuple[list[dict], int]:
         stripped = _strip_r_comments(content)
         _scan_pattern_smells(filepath, content, stripped, smell_counts)
         _detect_library_in_function(filepath, content, stripped, smell_counts)
+        _detect_lowercase_extension(filepath, content, stripped, smell_counts)
+        _detect_unnecessary_return(filepath, content, stripped, smell_counts)
 
     entries: list[dict] = []
     for check in R_SMELL_CHECKS:
@@ -125,6 +129,74 @@ def _detect_library_in_function(
                     "content": _line_preview(raw_content, i + 1),
                 }
             )
+
+
+def _detect_lowercase_extension(
+    filepath: str,
+    _raw_content: str,
+    _stripped_content: str,
+    smell_counts: dict[str, list[dict]],
+) -> None:
+    """Detect .r or .q file extensions (CRAN requires .R)."""
+    if _LOWERCASE_EXT_CHECK_ID not in smell_counts:
+        return
+
+    if filepath.endswith(".r") or filepath.endswith(".q"):
+        smell_counts[_LOWERCASE_EXT_CHECK_ID].append(
+            {
+                "file": filepath,
+                "line": 0,
+                "content": filepath,
+            }
+        )
+
+
+def _detect_unnecessary_return(
+    filepath: str,
+    raw_content: str,
+    stripped_content: str,
+    smell_counts: dict[str, list[dict]],
+) -> None:
+    """Detect unnecessary return() at end of functions."""
+    if _UNNECESSARY_RETURN_CHECK_ID not in smell_counts:
+        return
+
+    lines = stripped_content.splitlines()
+    # Track function depth and last non-empty line of each function
+    fn_depth = 0
+    fn_start_line = -1
+    last_non_empty: dict[int, int] = {}  # depth -> line number
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        opens = line.count("{") - line.count("}")
+
+        if opens > 0:
+            for _ in range(opens):
+                fn_depth += 1
+                if fn_depth == 1:
+                    fn_start_line = i
+                last_non_empty[fn_depth] = -1
+        elif opens < 0:
+            for _ in range(-opens):
+                if fn_depth > 0:
+                    # Check if last non-empty line was return()
+                    last_line = last_non_empty.get(fn_depth, -1)
+                    if last_line >= 0:
+                        last_stripped = lines[last_line].strip()
+                        if last_stripped.startswith("return(") and last_stripped.endswith(")"):
+                            smell_counts[_UNNECESSARY_RETURN_CHECK_ID].append(
+                                {
+                                    "file": filepath,
+                                    "line": last_line + 1,
+                                    "content": _line_preview(raw_content, last_line + 1),
+                                }
+                            )
+                    del last_non_empty[fn_depth]
+                fn_depth = max(0, fn_depth - 1)
+
+        if stripped and fn_depth > 0:
+            last_non_empty[fn_depth] = i
 
 
 def _find_r_files(path: Path) -> list[str]:
