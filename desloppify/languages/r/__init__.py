@@ -2,6 +2,13 @@
 
 from desloppify.languages._framework.generic_support.core import generic_lang
 from desloppify.languages._framework.treesitter import R_SPEC
+from desloppify.languages.r.review import (
+    HOLISTIC_REVIEW_DIMENSIONS,
+    LOW_VALUE_PATTERN,
+    REVIEW_GUIDANCE,
+    api_surface,
+    module_patterns,
+)
 
 generic_lang(
     name="r",
@@ -25,6 +32,13 @@ generic_lang(
     detect_markers=["DESCRIPTION", ".Rproj"],
     default_src="R",
     treesitter_spec=R_SPEC,
+    review={
+        "holistic_review_dimensions": HOLISTIC_REVIEW_DIMENSIONS,
+        "review_guidance": REVIEW_GUIDANCE,
+        "review_low_value_pattern": LOW_VALUE_PATTERN,
+        "review_module_patterns_fn": module_patterns,
+        "review_api_surface_fn": api_surface,
+    },
 )
 
 __all__ = [

@@ -57,6 +57,7 @@ def generic_lang(
     zone_rules: list[ZoneRule] | None = None,
     test_coverage_module: Any | None = None,
     entry_patterns: list[str] | None = None,
+    review: dict[str, Any] | None = None,
 ) -> LangConfig:
     """Build and register a generic language plugin from tool specs.
 
@@ -81,6 +82,7 @@ def generic_lang(
         zone_rules=zone_rules,
         test_coverage_module=test_coverage_module,
         entry_patterns=entry_patterns,
+        review=review,
     )
 
     from desloppify.languages import register_generic_lang
@@ -126,6 +128,12 @@ def generic_lang(
         test_file_extensions=extensions,
         zone_rules=opts.zone_rules if opts.zone_rules is not None else generic_zone_rules(extensions),
     )
+
+    # Apply language-specific review hooks if provided.
+    if opts.review is not None:
+        for key, value in opts.review.items():
+            if hasattr(cfg, key):
+                setattr(cfg, key, value)
 
     # Set integration depth — upgrade when tree-sitter provides capabilities.
     if has_treesitter and opts.depth in ("shallow", "minimal"):

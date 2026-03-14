@@ -39,6 +39,7 @@ class GenericLangOptions:
     zone_rules: list[ZoneRule] | None = None
     test_coverage_module: Any | None = None
     entry_patterns: list[str] | None = None
+    review: dict[str, Any] | None = None
 
 
 def _register_generic_tool_specs(tool_specs: list[dict[str, Any]]) -> dict[str, FixerConfig]:
