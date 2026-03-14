@@ -40,6 +40,7 @@ class GenericLangOptions:
     test_coverage_module: Any | None = None
     entry_patterns: list[str] | None = None
     custom_phases: list[DetectorPhase] | None = None
+    review: dict[str, Any] | None = None
 
 
 def _register_generic_tool_specs(tool_specs: list[dict[str, Any]]) -> dict[str, FixerConfig]:
