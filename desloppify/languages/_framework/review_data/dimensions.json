@@ -19,7 +19,10 @@
     "authorization_consistency",
     "incomplete_migration",
     "package_organization",
-    "design_coherence"
+    "design_coherence",
+    "cran_readiness",
+    "api_lifecycle_health",
+    "vectorization_discipline"
   ],
   "dimension_prompts": {
     "naming_quality": {
@@ -345,6 +348,53 @@
         "Section dividers and organizational comments",
         "License headers",
         "Type annotations that serve as documentation"
+      ]
+    },
+    "cran_readiness": {
+      "description": "R package CRAN submission readiness: documentation, metadata, and structure compliance",
+      "look_for": [
+        "Exported functions missing @return or @examples in roxygen2 documentation",
+        "DESCRIPTION Title not in title case, contains redundant phrases ('A Toolkit for', 'for R'), or exceeds 65 characters",
+        "DESCRIPTION Description starting with 'This package' or 'Functions for', too short (<2 sentences), or missing acronym expansion",
+        "URLs using http:// instead of https:// or redirecting to different locations",
+        "Authors@R missing copyright holder with [cph] role",
+        "Missing NEWS.md or cran-comments.md",
+        "Un-exported functions with roxygen examples not using ::: notation or @noRd"
+      ],
+      "skip": [
+        "Non-CRAN packages (internal tools, Shiny apps)",
+        "Packages in early development stage without DESCRIPTION",
+        "Functions documented in separate .Rd files without roxygen2"
+      ]
+    },
+    "api_lifecycle_health": {
+      "description": "R API evolution and deprecation: lifecycle badges, deprecation signaling, and experimental markers",
+      "look_for": [
+        "Deprecated functions without lifecycle::badge('deprecated') or lifecycle::deprecate_warn()/deprecate_stop()",
+        "Experimental functions without lifecycle::signal_stage('experimental', ...)",
+        "Superseded functions not documenting preferred alternatives",
+        "Deprecated arguments still as primary in function signatures instead of using deprecated() default",
+        "Missing migration examples in deprecated function docs"
+      ],
+      "skip": [
+        "Packages not using the lifecycle package",
+        "Internal (non-exported) functions",
+        "Packages in early rapid-development phase"
+      ]
+    },
+    "vectorization_discipline": {
+      "description": "R vectorization: using vectorized operations instead of explicit loops, avoiding scalar-in-vector traps",
+      "look_for": [
+        "Explicit for/while loops where vectorized equivalents exist (lapply/vapply/sapply or built-in vector ops)",
+        "Vectorized conditions in if() statements — if (x > 0) where x is a vector only checks first element",
+        "Growing objects in loops (c() or append() in a loop instead of pre-allocation)",
+        "Using 1:n() instead of seq_len(n) which handles zero-length case",
+        "Explicit indexing where logical vector subsetting would be clearer"
+      ],
+      "skip": [
+        "Loops with side effects or complex control flow that cannot be vectorized",
+        "Recursive algorithms that genuinely require iterative implementation",
+        "Performance-critical inner loops where R-level vectorization is known to be slower"
       ]
     },
     "authorization_coherence": {

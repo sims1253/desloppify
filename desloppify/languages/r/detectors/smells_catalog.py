@@ -63,6 +63,42 @@ R_SMELL_CHECKS = [
         "pattern": None,
         "severity": "low",
     },
+    {
+        "id": "trailing_semicolons",
+        "label": "trailing semicolons — unnecessary, most style guides forbid",
+        "pattern": r";\s*$",
+        "severity": "low",
+    },
+    {
+        "id": "equals_na",
+        "label": "== NA — always returns NA, use is.na()",
+        "pattern": r"==\s*(?:NA|na|TRUE|FALSE|True|False)\b",
+        "severity": "high",
+    },
+    {
+        "id": "import_package_as_whole",
+        "label": "import() of whole package — causes name clashes",
+        "pattern": r"(?<!\w)import\s*\(\s*[\"'](?:\w[\w.]*)[\"']\s*\)",
+        "severity": "medium",
+    },
+    {
+        "id": "missing_default",
+        "label": "missing() as default — use NULL instead",
+        "pattern": r"=\s*missing\s*\(",
+        "severity": "medium",
+    },
+    {
+        "id": "lowercase_r_extension",
+        "label": ".r or .q file extension — CRAN requires .R",
+        "pattern": None,
+        "severity": "medium",
+    },
+    {
+        "id": "unnecessary_return",
+        "label": "unnecessary return() at end of function",
+        "pattern": None,
+        "severity": "low",
+    },
 ]
 
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
