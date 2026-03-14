@@ -25,7 +25,7 @@ SKILL_SEARCH_PATHS = (
     ".opencode/skills/desloppify/SKILL.md",
     "AGENTS.md",
     "CLAUDE.md",
-    ".cursor/rules/desloappify.md",
+    ".cursor/rules/desloppify.md",
     ".github/copilot-instructions.md",
 )
 
