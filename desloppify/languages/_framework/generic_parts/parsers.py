@@ -285,6 +285,93 @@ def parse_next_lint(output: str, scan_path: Path) -> tuple[list[dict], dict]:
     return entries, {"potential": potential}
 
 
+def parse_goodpractice(output: str, scan_path: Path) -> list[dict]:
+    """Parse goodpractice JSON output via ``results(gp())``.
+
+    The command should be::
+
+        Rscript -e "library(goodpractice); g <- gp('.'); cat(jsonlite::toJSON(results(g), pretty=TRUE))"
+
+    Each row has ``check``, ``passed`` (TRUE/FALSE/NA), and
+    optionally ``result`` or ``message``.  NA ``passed`` means the
+    check could not be carried out (e.g. covr not available).
+    """
+    del scan_path
+    entries: list[dict] = []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("{") or line.startswith("["):
+            data = _load_json_output(line, parser_name="goodpractice")
+            if not isinstance(data, list):
+                continue
+            for row in data:
+                check = row.get("check", "")
+                passed = row.get("passed")
+                message = row.get("message", "")
+                if passed is False and check:
+                    entries.append(
+                        {
+                            "file": "<goodpractice>",
+                            "line": 0,
+                            "message": f"[goodpractice] {check}: {message}",
+                        }
+                    )
+            continue
+        try:
+            data = json.loads(line)
+            if isinstance(data, dict):
+                check = data.get("check", "")
+                passed = data.get("passed")
+                message = data.get("message", "")
+                if passed is False and check:
+                    entries.append(
+                        {
+                            "file": "<goodpractice>",
+                            "line": 0,
+                            "message": f"[goodpractice] {check}: {message}",
+                        }
+                    )
+        except (json.JSONDecodeError, ValueError):
+            continue
+    return entries
+
+
+def parse_covr(output: str, scan_path: Path) -> list[dict]:
+    """Parse covr::package_coverage() tabular output.
+
+    Expected format::
+
+        R/file.R\t<percentage>
+
+    Files below 80% coverage are reported as issues.
+    """
+    del scan_path
+    entries: list[dict] = []
+    for line in output.splitlines():
+        line = line.strip()
+        if not line or "\t" not in line:
+            continue
+        parts = line.split("\t")
+        if len(parts) < 2:
+            continue
+        filepath = parts[0].strip()
+        try:
+            pct = float(parts[1].strip().rstrip("%"))
+        except ValueError:
+            continue
+        if pct < 80.0:
+            entries.append(
+                {
+                    "file": filepath,
+                    "line": 0,
+                    "message": f"[covr] {filepath}: {pct}% coverage (below 80% threshold)",
+                }
+            )
+    return entries
+
+
 ToolParseResult = list[dict] | tuple[list[dict], dict]
 ToolParser = Callable[[str, Path], ToolParseResult]
 
@@ -299,6 +386,8 @@ PARSERS: dict[str, ToolParser] = {
     "cargo": parse_cargo,
     "eslint": parse_eslint,
     "next_lint": parse_next_lint,
+    "goodpractice": parse_goodpractice,
+    "covr": parse_covr,
 }
 
 
@@ -309,7 +398,9 @@ __all__ = [
     "ToolParser",
     "parse_cargo",
     "parse_credo",
+    "parse_covr",
     "parse_eslint",
+    "parse_goodpractice",
     "parse_gnu",
     "parse_golangci",
     "parse_json",
