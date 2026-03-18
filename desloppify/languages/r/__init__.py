@@ -1,4 +1,4 @@
-"""R language plugin — Jarl, lintr + tree-sitter + R-specific smells."""
+"""R language plugin — goodpractice, Jarl, lintr + tree-sitter + R-specific smells."""
 
 from desloppify.languages._framework.base.types import DetectorPhase
 from desloppify.languages._framework.generic_support.core import generic_lang
@@ -35,8 +35,48 @@ generic_lang(
             "tier": 3,
             "fix_cmd": None,
         },
+        {
+            "label": "goodpractice",
+            "cmd": (
+                "Rscript -e "
+                "\"library(goodpractice); "
+                "g <- gp('.'); "
+                "cat(jsonlite::toJSON(results(g), pretty=TRUE))\""
+            ),
+            "fmt": "goodpractice",
+            "id": "goodpractice",
+            "tier": 3,
+            "fix_cmd": None,
+        },
+        {
+            "label": "covr",
+            "cmd": "Rscript -e \"cat(covr::package_coverage())\"",
+            "fmt": "covr",
+            "id": "covr_coverage",
+            "tier": 3,
+            "fix_cmd": None,
+        },
+        {
+            "label": "R CMD check",
+            "cmd": "R CMD check --no-manual --no-build-vignettes .",
+            "fmt": "r_cmd_check",
+            "id": "r_cmd_check",
+            "tier": 3,
+            "fix_cmd": None,
+        },
     ],
-    exclude=[".Rhistory", ".RData", ".Rproj.user", "renv", "packrat"],
+    exclude=[
+        ".Rhistory",
+        ".RData",
+        ".Rproj.user",
+        "renv",
+        "packrat",
+        "man",
+        "Meta",
+        "doc",
+        "inst/doc",
+        "NAMESPACE",
+    ],
     depth="shallow",
     detect_markers=["DESCRIPTION", ".Rproj"],
     default_src="R",
