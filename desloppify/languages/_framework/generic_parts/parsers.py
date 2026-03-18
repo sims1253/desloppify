@@ -372,6 +372,59 @@ def parse_covr(output: str, scan_path: Path) -> list[dict]:
     return entries
 
 
+def parse_r_cmd_check(output: str, scan_path: Path) -> list[dict]:
+    """Parse R CMD check output.
+
+    Captures file-level warnings/errors and summary-level WARNINGs/ERRORs.
+    Summary NOTEs are skipped.
+    """
+    del scan_path
+    entries: list[dict] = []
+    file_re = re.compile(r"^(.+?):(\d+):\s*(warning|error):\s*(.+)$", re.IGNORECASE)
+    summary_warn_re = re.compile(
+        r"^\*\s+(?:checking|running)\s+(.+?)\s*\.\s*\.\.\s*WARNING$", re.IGNORECASE,
+    )
+    summary_err_re = re.compile(
+        r"^\*\s+(?:checking|running)\s+(.+?)\s*\.\s*\.\.\s*ERROR$", re.IGNORECASE,
+    )
+    for line in output.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = file_re.match(line)
+        if m:
+            entries.append(
+                {
+                    "file": m.group(1).strip(),
+                    "line": int(m.group(2)),
+                    "message": f"[R CMD check] {m.group(3)}: {m.group(4).strip()}",
+                }
+            )
+            continue
+        m = summary_warn_re.match(line)
+        if m:
+            desc = m.group(1).strip()
+            entries.append(
+                {
+                    "file": "<R CMD check>",
+                    "line": 0,
+                    "message": f"[R CMD check] WARNING: {desc}",
+                }
+            )
+            continue
+        m = summary_err_re.match(line)
+        if m:
+            desc = m.group(1).strip()
+            entries.append(
+                {
+                    "file": "<R CMD check>",
+                    "line": 0,
+                    "message": f"[R CMD check] ERROR: {desc}",
+                }
+            )
+    return entries
+
+
 ToolParseResult = list[dict] | tuple[list[dict], dict]
 ToolParser = Callable[[str, Path], ToolParseResult]
 
@@ -388,6 +441,7 @@ PARSERS: dict[str, ToolParser] = {
     "next_lint": parse_next_lint,
     "goodpractice": parse_goodpractice,
     "covr": parse_covr,
+    "r_cmd_check": parse_r_cmd_check,
 }
 
 
@@ -406,5 +460,6 @@ __all__ = [
     "parse_json",
     "parse_phpstan",
     "parse_next_lint",
+    "parse_r_cmd_check",
     "parse_rubocop",
 ]
