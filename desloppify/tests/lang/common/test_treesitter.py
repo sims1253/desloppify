@@ -646,7 +646,12 @@ class TestSpecValidation:
             _make_query,
         )
 
-        parser, language = _get_parser(spec.grammar)
+        try:
+            parser, language = _get_parser(spec.grammar)
+        except (LookupError, Exception) as exc:
+            if "not available" in str(exc) or "not found" in str(exc).lower():
+                pytest.skip(f"grammar {spec.grammar!r} not available in this environment")
+            raise
         # Verify function query compiles.
         if spec.function_query:
             q = _make_query(language, spec.function_query)
