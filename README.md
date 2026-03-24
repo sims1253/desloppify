@@ -98,4 +98,4 @@ If you'd like to join a community of vibe engineers who want to build beautiful 
 
 Issues, improvements, and PRs are hugely appreciated — [github.com/peteromallet/desloppify](https://github.com/peteromallet/desloppify).
 
-Desloppify is free for any individual — whether working independently or at a company — to use for their own work. It is also free for open source companies to use in any capacity, including commercial. Non-open source companies who wish to commercialize it should refer to the [LICENSE](LICENSE) for pricing details.
+Desloppify is free for any individual — whether working independently or at a company — to use for their own work. It is also free for open source companies to use in any capacity, including commercial. Non-open source companies who wish to commercialize it should refer to the [LICENSE](LICENSE) for transparent pricing details.
