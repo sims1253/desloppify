@@ -8,6 +8,9 @@ from pathlib import Path
 
 from desloppify.app.commands.helpers.issue_id_display import short_issue_id
 from desloppify.app.commands.helpers.transition_messages import emit_transition_message
+from desloppify.app.commands.plan.triage.completion_flow import (
+    count_log_activity_since,
+)
 from desloppify.app.commands.review.importing.flags import imported_assessment_keys
 from desloppify.base.config import target_strict_score_from_config
 from desloppify.base.exception_sets import PLAN_LOAD_EXCEPTIONS
@@ -38,9 +41,12 @@ from desloppify.engine._plan.refresh_lifecycle import (
     mark_subjective_review_completed,
 )
 from desloppify.engine._state.progression import (
+    _execution_log_ids_since,
     _extract_review_payload_detail,
     append_progression_event,
+    build_plan_checkpoint_event,
     build_review_complete_event,
+    last_plan_checkpoint_timestamp,
     maybe_append_entered_planning,
 )
 from desloppify.engine.plan_triage import (
@@ -200,6 +206,17 @@ def _print_workflow_injected_message(workflow_injected_ids: list[str]) -> None:
             "cyan",
         )
     )
+
+
+def _print_auto_resolved_workflow_message(plan: dict, result: ReconcileResult) -> None:
+    if not result.communicate_score or not result.communicate_score.auto_resolved:
+        return
+    strict = (plan.get("plan_start_scores") or {}).get("strict")
+    if isinstance(strict, (int, float)):
+        message = f"  Plan: score checkpoint saved (strict: {strict:.1f})."
+    else:
+        message = "  Plan: score checkpoint saved."
+    print(colorize(message, "dim"))
 
 
 def _build_import_sync_inputs(
@@ -464,6 +481,29 @@ def sync_plan_after_import(
             )
             save_plan(plan, plan_path)
 
+        if (
+            result.communicate_score is not None
+            and result.communicate_score.auto_resolved
+        ):
+            try:
+                last_cp_ts = last_plan_checkpoint_timestamp()
+                cp_resolved, cp_skipped = _execution_log_ids_since(plan, last_cp_ts)
+                cp_exec_summary = count_log_activity_since(plan, last_cp_ts)
+                append_progression_event(
+                    build_plan_checkpoint_event(
+                        state,
+                        plan,
+                        phase_before=phase_before,
+                        trigger="subjective_review_cleared",
+                        source_command="review",
+                        resolved_since_last=cp_resolved or None,
+                        skipped_since_last=cp_skipped or None,
+                        execution_summary=cp_exec_summary,
+                    )
+                )
+            except Exception:
+                _logger.warning("Failed to append plan_checkpoint progression event", exc_info=True)
+
         # --- Progression: subjective_review_completed ---
         if transition.subjective_review_marked:
             try:
@@ -509,6 +549,7 @@ def sync_plan_after_import(
                 triage_injected=bool(result.triage and result.triage.injected),
                 outcome=outcome,
             )
+        _print_auto_resolved_workflow_message(plan, result)
         _print_workflow_injected_message(result.workflow_injected_ids)
         if transition.transition_phase:
             emit_transition_message(transition.transition_phase)

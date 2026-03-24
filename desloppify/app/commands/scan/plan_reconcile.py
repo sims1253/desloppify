@@ -6,6 +6,9 @@ import logging
 from typing import Any
 
 from desloppify import state as state_mod
+from desloppify.app.commands.plan.triage.completion_flow import (
+    count_log_activity_since,
+)
 from desloppify.base.exception_sets import PLAN_LOAD_EXCEPTIONS
 from desloppify.base.output.fallbacks import log_best_effort_failure
 from desloppify.base.output.terminal import colorize
@@ -19,6 +22,7 @@ from desloppify.engine._plan.operations.meta import append_log_entry
 from desloppify.engine._plan.persistence import load_plan, save_plan
 from desloppify.engine._plan.scan_issue_reconcile import reconcile_plan_after_scan
 from desloppify.engine._plan.refresh_lifecycle import (
+    carry_forward_subjective_review,
     current_lifecycle_phase,
     mark_postflight_scan_completed,
 )
@@ -36,8 +40,10 @@ from desloppify.engine._plan.sync.workflow import (
 from desloppify.engine._state.progression import (
     _execution_log_ids_since,
     append_progression_event,
+    build_plan_checkpoint_event,
     build_postflight_scan_event,
     build_scan_complete_event,
+    last_plan_checkpoint_timestamp,
     maybe_append_entered_planning,
 )
 from desloppify.engine.work_queue import build_deferred_disposition_item
@@ -113,13 +119,15 @@ def _seed_plan_start_scores(plan: dict[str, object], state: state_mod.StateModel
     # a good baseline with a post-regression one)
     if existing and isinstance(existing, dict) and not plan.get("previous_plan_start_scores"):
         plan["previous_plan_start_scores"] = dict(existing)
+    preserve_score_sentinel = "previous_plan_start_scores" in plan
     plan["plan_start_scores"] = {
         "strict": scores.strict,
         "overall": scores.overall,
         "objective": scores.objective,
         "verified": scores.verified,
     }
-    clear_score_communicated_sentinel(plan)
+    if not preserve_score_sentinel:
+        clear_score_communicated_sentinel(plan)
     clear_create_plan_sentinel(plan)
     plan["scan_count_at_plan_start"] = int(state.get("scan_count", 0) or 0)
     return True
@@ -283,6 +291,13 @@ def _display_reconcile_results(
     *,
     mid_cycle: bool,
 ) -> None:
+    if result.communicate_score and result.communicate_score.auto_resolved:
+        strict = (plan.get("plan_start_scores") or {}).get("strict")
+        if isinstance(strict, (int, float)):
+            message = f"  Plan: score checkpoint saved (strict: {strict:.1f})."
+        else:
+            message = "  Plan: score checkpoint saved."
+        print(colorize(message, "dim"))
     subjective = result.subjective
     if subjective and subjective.resurfaced:
         print(
@@ -315,7 +330,7 @@ def _display_reconcile_results(
     if result.create_plan and result.create_plan.injected:
         print(
             colorize(
-                "  Plan: reviews complete — `workflow::create-plan` queued.",
+                "  Plan: reviews complete — create the execution plan next.",
                 "cyan",
             )
         )
@@ -352,6 +367,19 @@ def reconcile_plan_post_scan(runtime: Any) -> None:
 
     force_rescan = getattr(runtime, "force_rescan", False)
     dirty = _reset_cycle_for_force_rescan(plan) if force_rescan else False
+    if force_rescan and phase_before == "plan":
+        old_postflight_scan_count = None
+        refresh_state = plan.get("refresh_state")
+        if isinstance(refresh_state, dict):
+            old_postflight_scan_count = refresh_state.get(
+                "postflight_scan_completed_at_scan_count"
+            )
+        if carry_forward_subjective_review(
+            plan,
+            old_postflight_scan_count=old_postflight_scan_count,
+            new_scan_count=int(runtime.state.get("scan_count", 0) or 0),
+        ):
+            dirty = True
     dirty = _sync_post_scan_without_policy(plan=plan, state=runtime.state) or dirty
 
     boundary_crossed = live_planned_queue_empty(plan) or force_rescan
@@ -361,6 +389,7 @@ def reconcile_plan_post_scan(runtime: Any) -> None:
             runtime.state,
             target_strict=target_strict_score_from_config(runtime.config),
             force_rescan=force_rescan,
+            defer_if_subjective_queued=True,
         )
         _display_reconcile_results(
             result,
@@ -380,27 +409,51 @@ def reconcile_plan_post_scan(runtime: Any) -> None:
     if _sync_postflight_scan_completion_and_log(plan, runtime.state, phase_before=phase_before):
         dirty = True
 
+    save_succeeded = False
     if dirty:
         try:
             save_plan(plan, plan_path)
+            save_succeeded = True
         except PLAN_LOAD_EXCEPTIONS as exc:
             logger.warning("Plan reconciliation save failed: %s", exc)
 
+    _emit_checkpoint = (
+        boundary_crossed
+        and save_succeeded
+        and result.checkpoint_plan_start is not None
+    )
+    if _emit_checkpoint:
+        try:
+            last_cp_ts = last_plan_checkpoint_timestamp()
+            cp_resolved, cp_skipped = _execution_log_ids_since(plan, last_cp_ts)
+            cp_exec_summary = count_log_activity_since(plan, last_cp_ts)
+            append_progression_event(
+                build_plan_checkpoint_event(
+                    runtime.state,
+                    plan,
+                    phase_before=phase_before,
+                    trigger="no_subjective_review_needed",
+                    source_command="scan",
+                    plan_start_scores_snapshot=result.checkpoint_plan_start,
+                    prev_plan_start_scores_snapshot=result.checkpoint_prev_start,
+                    resolved_since_last=cp_resolved or None,
+                    skipped_since_last=cp_skipped or None,
+                    execution_summary=cp_exec_summary,
+                )
+            )
+        except Exception:
+            logger.warning("Failed to append plan_checkpoint progression event", exc_info=True)
+
     # --- Progression: scan_complete (unconditional) ---
     try:
-        from desloppify.app.commands.plan.triage.completion_flow import count_log_activity_since
-
         prev_last_scan = getattr(runtime, "prev_last_scan", None)
-        execution_summary = (
-            count_log_activity_since(plan, prev_last_scan) if prev_last_scan else {}
-        )
+        execution_summary = count_log_activity_since(plan, prev_last_scan)
         resolved_ids, skipped_ids = _execution_log_ids_since(plan, prev_last_scan)
         append_progression_event(
             build_scan_complete_event(
                 runtime.state,
                 plan,
                 getattr(runtime, "scan_diff", None) or {},
-                prev_scores=getattr(runtime, "prev_scores", None),
                 lang=runtime.lang.name if getattr(runtime, "lang", None) else None,
                 phase_before=phase_before,
                 execution_summary=execution_summary,
