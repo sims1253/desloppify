@@ -119,6 +119,20 @@ def _ensure_state_lang_capabilities(
     )
 
 
+def _state_review_cache(state: StateModel) -> dict[str, object]:
+    """Return language review cache payload, creating storage when missing."""
+    review_cache = state.get("review_cache")
+    if review_cache is None:
+        normalized: dict[str, object] = {}
+        state["review_cache"] = normalized
+        return normalized
+    if isinstance(review_cache, dict):
+        return review_cache
+    raise ScanStateContractError(
+        "state.review_cache must be an object when present"
+    )
+
+
 def _state_issues(state: StateModel) -> dict[str, dict[str, Any]]:
     """Return normalized issue map from state."""
     issues = state.get("work_items")
@@ -151,6 +165,9 @@ class ScanRuntime:
     reset_subjective_count: int = 0
     coverage_warnings: list[DetectorCoverageRecord] = field(default_factory=list)
     force_rescan: bool = False
+    scan_diff: dict[str, object] | None = None
+    prev_dim_scores: dict[str, object] | None = None
+    prev_last_scan: str | None = None
 
 
 @dataclass
@@ -191,7 +208,7 @@ def _configure_lang_runtime(
     runtime_lang = make_lang_run(
         lang,
         overrides=LangRunOverrides(
-            review_cache=state.get("review_cache", {}),
+            review_cache=_state_review_cache(state),
             review_max_age_days=config.get("review_max_age_days", 30),
             subjective_assessments=_state_subjective_assessments(state),
             runtime_settings=lang_settings,
@@ -308,13 +325,16 @@ def prepare_scan_runtime(args: argparse.Namespace) -> ScanRuntime:
 def _augment_with_stale_exclusion_issues(
     issues: list[dict[str, Any]],
     runtime: ScanRuntime,
+    *,
+    scanned_files: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Append stale exclude issues when excluded dirs are unreferenced."""
     extra_exclusions = get_exclusions()
     if not (extra_exclusions and runtime.lang and runtime.lang.file_finder):
         return issues
 
-    scanned_files = runtime.lang.file_finder(runtime.path)
+    if scanned_files is None:
+        scanned_files = runtime.lang.file_finder(runtime.path)
     stale = audit_excluded_dirs(
         extra_exclusions, scanned_files, get_project_root()
     )
@@ -326,6 +346,21 @@ def _augment_with_stale_exclusion_issues(
     for stale_issue in stale:
         print(colorize(f"  ℹ {stale_issue['summary']}", "dim"))
     return augmented
+
+
+def _resolve_scanned_files(runtime: ScanRuntime) -> list[str]:
+    """Resolve scan file list once for post-generation lifecycle steps."""
+    if not runtime.lang:
+        return []
+    zone_map = getattr(runtime.lang, "zone_map", None)
+    if zone_map is not None and hasattr(zone_map, "all_files"):
+        files = zone_map.all_files()
+        if isinstance(files, list):
+            return files
+    file_finder = getattr(runtime.lang, "file_finder", None)
+    if not file_finder:
+        return []
+    return file_finder(runtime.path)
 
 
 def _augment_with_stale_wontfix_issues(
@@ -360,26 +395,34 @@ def run_scan_generation(
                 profile=runtime.profile,
             ),
         )
+        scanned_files = _resolve_scanned_files(runtime)
+        codebase_metrics = collect_codebase_metrics(
+            runtime.lang,
+            runtime.path,
+            files=scanned_files,
+        )
+        warn_explicit_lang_with_no_files(
+            runtime.args, runtime.lang, runtime.path, codebase_metrics
+        )
+        issues = _augment_with_stale_exclusion_issues(
+            issues,
+            runtime,
+            scanned_files=scanned_files,
+        )
+        decay_scans = _coerce_int(
+            runtime.config.get("wontfix_decay_scans"),
+            default=_WONTFIX_DECAY_SCANS_DEFAULT,
+        )
+        issues, monitored_wontfix = _augment_with_stale_wontfix_issues(
+            issues,
+            runtime,
+            decay_scans=max(decay_scans, 0),
+        )
+        potentials["stale_wontfix"] = monitored_wontfix
+        return issues, potentials, codebase_metrics
     finally:
         disable_parse_cache()
         disable_file_cache()
-
-    codebase_metrics = collect_codebase_metrics(runtime.lang, runtime.path)
-    warn_explicit_lang_with_no_files(
-        runtime.args, runtime.lang, runtime.path, codebase_metrics
-    )
-    issues = _augment_with_stale_exclusion_issues(issues, runtime)
-    decay_scans = _coerce_int(
-        runtime.config.get("wontfix_decay_scans"),
-        default=_WONTFIX_DECAY_SCANS_DEFAULT,
-    )
-    issues, monitored_wontfix = _augment_with_stale_wontfix_issues(
-        issues,
-        runtime,
-        decay_scans=max(decay_scans, 0),
-    )
-    potentials["stale_wontfix"] = monitored_wontfix
-    return issues, potentials, codebase_metrics
 
 
 def merge_scan_results(
@@ -406,6 +449,7 @@ def merge_scan_results(
     _persist_scan_coverage(runtime.state, runtime.lang)
 
     target_score = target_strict_score_from_config(runtime.config)
+    runtime.prev_last_scan = str(runtime.state.get("last_scan", "") or "") or None
 
     diff = merge_scan(
         runtime.state,
@@ -421,6 +465,7 @@ def merge_scan_results(
             ignore=runtime.config.get("ignore", []),
             subjective_integrity_target=target_score,
             project_root=str(get_project_root()),
+            zone_map=runtime.lang.zone_map if runtime.lang else None,
         ),
     )
 
@@ -434,6 +479,8 @@ def merge_scan_results(
     )
 
     _clear_needs_rescan_flag(runtime.config)
+    runtime.scan_diff = diff
+    runtime.prev_dim_scores = prev_dim_scores
     _reconcile_plan_post_scan(runtime)
 
     return ScanMergeResult(

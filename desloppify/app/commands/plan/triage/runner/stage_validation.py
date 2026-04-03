@@ -31,7 +31,6 @@ from ..review_coverage import (
 from ..stages.helpers import (
     active_triage_issue_scope,
     scoped_manual_clusters_with_issues,
-    triage_scoped_plan,
     unclustered_review_issues,
     unenriched_clusters,
     value_check_targets,
@@ -109,6 +108,23 @@ def _validate_observe_stage(
     blocking = [failure for failure in ev_failures if failure.blocking]
     if blocking:
         return False, blocking[0].message
+    return True, ""
+
+
+def _validate_strategize_stage(plan: dict, stages: dict) -> tuple[bool, str]:
+    """Validate recorded strategize-stage content."""
+    if "strategize" not in stages:
+        return False, "Strategize stage not recorded."
+    if not stages["strategize"].get("confirmed_at"):
+        return False, "Strategize stage was not confirmed."
+    briefing = plan.get("epic_triage_meta", {}).get("strategist_briefing", {})
+    if not isinstance(briefing, dict):
+        return False, "Strategist briefing not persisted."
+    if len(str(briefing.get("executive_summary", "")).strip()) < 100:
+        return False, "Strategist executive_summary too short."
+    focus_dimensions = briefing.get("focus_dimensions")
+    if not isinstance(focus_dimensions, list) or not focus_dimensions:
+        return False, "Strategist briefing missing focus_dimensions."
     return True, ""
 
 
@@ -303,6 +319,7 @@ def validate_stage(
     meta = plan.get("epic_triage_meta", {})
     stages = meta.get("triage_stages", {})
     validators = {
+        "strategize": lambda: _validate_strategize_stage(plan, stages),
         "observe": lambda: _validate_observe_stage(
             stages=stages,
             triage_input=triage_input,

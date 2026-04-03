@@ -39,6 +39,8 @@ class GenericLangOptions:
     zone_rules: list[ZoneRule] | None = None
     test_coverage_module: Any | None = None
     entry_patterns: list[str] | None = None
+    external_test_dirs: list[str] | None = None
+    test_file_extensions: list[str] | None = None
     custom_phases: list[DetectorPhase] | None = None
     review: dict[str, Any] | None = None
 

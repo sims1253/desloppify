@@ -303,6 +303,16 @@ def clear_score_communicated_sentinel(plan: PlanModel) -> None:
     plan.pop("previous_plan_start_scores", None)
 
 
+def clear_create_plan_sentinel(plan: PlanModel) -> None:
+    """Clear the ``create_plan_resolved_this_cycle`` sentinel.
+
+    Call this at the same cycle-boundary points as
+    ``clear_score_communicated_sentinel`` so that ``sync_create_plan_needed``
+    can re-inject ``workflow::create-plan`` in the next cycle.
+    """
+    plan.pop("create_plan_resolved_this_cycle", None)
+
+
 _EMPTY = QueueSyncResult
 
 
@@ -343,6 +353,7 @@ def sync_create_plan_needed(
     - At least one objective issue exists
     - ``workflow::create-plan`` is not already in the queue
     - No triage stages are pending
+    - ``workflow::create-plan`` has not already been resolved this cycle
 
     Front-loads it into the workflow prefix so it stays ahead of triage.
     """
@@ -350,6 +361,11 @@ def sync_create_plan_needed(
     order: list[str] = plan["queue_order"]
 
     if WORKFLOW_CREATE_PLAN_ID in order:
+        return _EMPTY()
+    # Already resolved this cycle — sentinel is set when injected and
+    # cleared at cycle boundaries (force-rescan, score seeding, queue
+    # drain, trusted import).
+    if plan.get("create_plan_resolved_this_cycle"):
         return _EMPTY()
     if any(sid in order for sid in TRIAGE_IDS):
         return _EMPTY()
@@ -359,6 +375,7 @@ def sync_create_plan_needed(
     if not has_objective_backlog(state, policy):
         return _EMPTY()
 
+    plan["create_plan_resolved_this_cycle"] = True
     return _inject(plan, WORKFLOW_CREATE_PLAN_ID)
 
 
@@ -443,26 +460,29 @@ def sync_communicate_score_needed(
     *,
     policy: SubjectiveVisibility | None = None,
     current_scores: ScoreSnapshot | None = None,
+    defer_if_subjective_queued: bool = False,
 ) -> QueueSyncResult:
-    """Inject ``workflow::communicate-score`` and rebaseline scores.
+    """Auto-resolve score communication bookkeeping and rebaseline scores.
 
-    Injects when:
+    Triggers when:
     - All initial subjective reviews are complete (no unscored dims)
-    - ``workflow::communicate-score`` is not already in the queue
     - Score has not already been communicated this cycle
       (``previous_plan_start_scores`` absent)
 
-    When injected and *current_scores* is provided, ``plan_start_scores``
+    When triggered and *current_scores* is provided, ``plan_start_scores``
     is rebaselined to the current score so the score display unfreezes at
     the new value.  The previous baseline is preserved in
-    ``previous_plan_start_scores`` so the communicate-score queue item can
-    show the old → new delta — and so mid-cycle scans know not to
-    re-inject.
+    ``previous_plan_start_scores`` so old → new score context survives and
+    mid-cycle scans know not to re-trigger.
     """
     ensure_plan_defaults(plan)
     order: list[str] = plan["queue_order"]
 
     if WORKFLOW_COMMUNICATE_SCORE_ID in order:
+        return _EMPTY()
+    if defer_if_subjective_queued and any(
+        item.startswith("subjective::") for item in order
+    ):
         return _EMPTY()
     # Already communicated this cycle — previous_plan_start_scores is set
     # at injection time and cleared at cycle boundaries.
@@ -474,10 +494,10 @@ def sync_communicate_score_needed(
     if current_scores is not None:
         _rebaseline_plan_start_scores(plan, current_scores)
     # Set sentinel even when rebaseline was a no-op (no plan_start_scores
-    # to rebaseline) so mid-cycle scans don't re-inject.
+    # to rebaseline) so mid-cycle scans don't re-trigger.
     if not plan.get("previous_plan_start_scores"):
         plan["previous_plan_start_scores"] = {}
-    return _inject(plan, WORKFLOW_COMMUNICATE_SCORE_ID)
+    return QueueSyncResult(auto_resolved=[WORKFLOW_COMMUNICATE_SCORE_ID])
 
 
 def _rebaseline_plan_start_scores(
@@ -503,6 +523,7 @@ def _rebaseline_plan_start_scores(
 __all__ = [
     "PendingImportScoresMeta",
     "ScoreSnapshot",
+    "clear_create_plan_sentinel",
     "clear_score_communicated_sentinel",
     "import_scores_meta_matches",
     "pending_import_scores_meta",

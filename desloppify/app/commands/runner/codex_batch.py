@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -29,17 +30,49 @@ def _resolve_executable(name: str) -> list[str]:
     executed directly by ``subprocess`` without ``shell=True``.  Prefixing
     with ``cmd /c`` avoids needing ``shell=True`` while still resolving them.
 
-    When ``shutil.which()`` cannot locate the executable on Windows, we still
-    route through ``cmd /c`` so the shell's own PATH resolution can find
-    ``.cmd``/``.bat`` wrappers that Python's ``which`` missed.
+    However, ``.exe`` binaries can be invoked directly — wrapping them in
+    ``cmd /c`` causes double-quoting issues when arguments contain spaces
+    (cmd.exe re-parses the command with its own tokeniser, breaking prompts).
+
+    Only uses ``cmd /c`` for ``.cmd``/``.bat`` shims or when the executable
+    cannot be resolved (so cmd.exe's own PATH lookup can find it).
     """
     resolved = shutil.which(name)
     if sys.platform == "win32":
-        if resolved is not None and resolved.lower().endswith((".cmd", ".bat")):
-            return ["cmd", "/c", resolved]
-        # shutil.which may miss .cmd/.bat wrappers — let cmd.exe resolve it
-        return ["cmd", "/c", resolved or name]
+        if resolved is not None:
+            if resolved.lower().endswith((".cmd", ".bat")):
+                return ["cmd", "/c", resolved]
+            # .exe or extensionless — invoke directly, no cmd /c wrapper
+            return [resolved]
+        # shutil.which missed it — let cmd.exe resolve .cmd/.bat wrappers
+        return ["cmd", "/c", name]
     return [resolved or name]
+
+
+def _wrap_cmd_c(cmd: list[str]) -> list[str]:
+    """Collapse a ``cmd /c <exe> <args...>`` list into proper form.
+
+    ``cmd /c`` concatenates everything after ``/c`` into a single string and
+    re-parses it with its own tokeniser.  When arguments contain spaces
+    (e.g. repo paths like ``core_project - Copy``), passing them as separate
+    list elements causes ``subprocess.list2cmdline()`` to quote them
+    individually, but ``cmd``'s re-parsing can still split on spaces in
+    certain edge cases.
+
+    The reliable approach is to build the real command string ourselves with
+    ``subprocess.list2cmdline()`` and pass that as a **single** token after
+    ``/c``::
+
+        ["cmd", "/c", "codex exec -C \\"path with spaces\\" ..."]
+
+    ``list2cmdline`` on the outer list then leaves the inner string untouched
+    (it contains no special characters that need additional quoting), and
+    ``cmd /c`` receives exactly the string we intended.
+    """
+    if len(cmd) >= 3 and cmd[0].lower() == "cmd" and cmd[1].lower() == "/c":
+        inner = subprocess.list2cmdline(cmd[2:])
+        return ["cmd", "/c", inner]
+    return cmd
 
 
 def codex_batch_command(*, prompt: str, repo_root: Path, output_file: Path) -> list[str]:
@@ -48,7 +81,7 @@ def codex_batch_command(*, prompt: str, repo_root: Path, output_file: Path) -> l
     if effort not in {"low", "medium", "high", "xhigh"}:
         effort = "low"
     prefix = _resolve_executable("codex")
-    return [
+    cmd = [
         *prefix,
         "exec",
         "--ephemeral",
@@ -64,6 +97,7 @@ def codex_batch_command(*, prompt: str, repo_root: Path, output_file: Path) -> l
         str(output_file),
         prompt,
     ]
+    return _wrap_cmd_c(cmd)
 
 
 def run_codex_batch(

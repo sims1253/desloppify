@@ -52,6 +52,12 @@ _logger = logging.getLogger(__name__)
 
 
 def _print_status_warnings(config: dict) -> None:
+    if config.get("hermes_enabled"):
+        print(colorize(
+            '  ⚕ Hermes agent mode — model switching, autoreply, task handoff active'
+            '\n    To disable: set "hermes_enabled": false in config.json',
+            "cyan",
+        ))
     skill_warning = check_skill_version()
     if skill_warning:
         print(colorize(f"  {skill_warning}", "yellow"))
@@ -150,6 +156,18 @@ def print_score_section(
             target_strict=target_strict_score,
         ):
             print(colorize(line, style))
+        try:
+            from desloppify.app.commands.status.sparkline import (
+                extract_strict_trend,
+                render_sparkline,
+            )
+            from desloppify.engine._state.progression import load_progression
+
+            spark = render_sparkline(extract_strict_trend(load_progression()))
+            if spark:
+                print(colorize(f"  {spark}", "dim"))
+        except Exception:
+            _logger.debug("Sparkline rendering failed", exc_info=True)
         if breakdown is not None and breakdown.queue_total > 0:
             block = format_queue_block(breakdown)
             for text, style in block:

@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 from desloppify.app.commands.helpers.issue_id_display import short_issue_id
+from desloppify.app.commands.helpers.transition_messages import emit_transition_message
+from desloppify.app.commands.plan.triage.completion_flow import (
+    count_log_activity_since,
+)
 from desloppify.app.commands.review.importing.flags import imported_assessment_keys
 from desloppify.base.config import target_strict_score_from_config
 from desloppify.base.exception_sets import PLAN_LOAD_EXCEPTIONS
@@ -27,8 +32,23 @@ from desloppify.engine._plan.sync import (
     reconcile_plan,
 )
 from desloppify.engine._plan.sync.workflow_gates import sync_import_scores_needed
-from desloppify.engine._plan.sync.workflow import clear_score_communicated_sentinel
-from desloppify.engine._plan.refresh_lifecycle import mark_subjective_review_completed
+from desloppify.engine._plan.sync.workflow import (
+    clear_create_plan_sentinel,
+    clear_score_communicated_sentinel,
+)
+from desloppify.engine._plan.refresh_lifecycle import (
+    current_lifecycle_phase,
+    mark_subjective_review_completed,
+)
+from desloppify.engine._state.progression import (
+    _execution_log_ids_since,
+    _extract_review_payload_detail,
+    append_progression_event,
+    build_plan_checkpoint_event,
+    build_review_complete_event,
+    last_plan_checkpoint_timestamp,
+    maybe_append_entered_planning,
+)
 from desloppify.engine.plan_triage import (
     TRIAGE_CMD_RUN_STAGES_CLAUDE,
     TRIAGE_CMD_RUN_STAGES_CODEX,
@@ -36,6 +56,8 @@ from desloppify.engine.plan_triage import (
 from desloppify.intelligence.review.importing.contracts_types import (
     NormalizedReviewImportPayload,
 )
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -69,6 +91,8 @@ class _ImportPlanTransition:
     covered_pruned: list[str]
     import_scores_result: object
     reconcile_result: ReconcileResult
+    transition_phase: str | None = None
+    subjective_review_marked: bool = False
 
 
 def _print_review_import_sync(
@@ -184,6 +208,17 @@ def _print_workflow_injected_message(workflow_injected_ids: list[str]) -> None:
     )
 
 
+def _print_auto_resolved_workflow_message(plan: dict, result: ReconcileResult) -> None:
+    if not result.communicate_score or not result.communicate_score.auto_resolved:
+        return
+    strict = (plan.get("plan_start_scores") or {}).get("strict")
+    if isinstance(strict, (int, float)):
+        message = f"  Plan: score checkpoint saved (strict: {strict:.1f})."
+    else:
+        message = "  Plan: score checkpoint saved."
+    print(colorize(message, "dim"))
+
+
 def _build_import_sync_inputs(
     diff: dict,
     import_payload: NormalizedReviewImportPayload | None,
@@ -243,10 +278,12 @@ def _apply_import_plan_transitions(
         import_file=import_file,
         import_payload=import_payload,
     )
+    subjective_review_marked = False
     if trusted:
         clear_score_communicated_sentinel(plan)
+        clear_create_plan_sentinel(plan)
         if sync_inputs.covered_ids:
-            mark_subjective_review_completed(
+            subjective_review_marked = mark_subjective_review_completed(
                 plan,
                 scan_count=int(state.get("scan_count", 0) or 0),
             )
@@ -270,11 +307,18 @@ def _apply_import_plan_transitions(
             triage_deferred=import_result.triage_deferred,
         )
 
+    transition_phase = (
+        reconcile_result.lifecycle_phase
+        if reconcile_result.lifecycle_phase_changed
+        else None
+    )
     return _ImportPlanTransition(
         import_result=import_result,
         covered_pruned=covered_pruned,
         import_scores_result=import_scores_result,
         reconcile_result=reconcile_result,
+        transition_phase=transition_phase,
+        subjective_review_marked=subjective_review_marked,
     )
 
 
@@ -397,6 +441,7 @@ def sync_plan_after_import(
             return PlanImportSyncOutcome(status="skipped")
 
         plan = load_plan(plan_path)
+        phase_before = current_lifecycle_phase(plan)
         sync_inputs = _build_import_sync_inputs(diff, import_payload)
         trusted = assessment_mode in {"trusted_internal", "attested_external"}
         was_boundary_ready = live_planned_queue_empty(plan)
@@ -436,6 +481,66 @@ def sync_plan_after_import(
             )
             save_plan(plan, plan_path)
 
+        if (
+            result.communicate_score is not None
+            and result.communicate_score.auto_resolved
+        ):
+            try:
+                last_cp_ts = last_plan_checkpoint_timestamp()
+                cp_resolved, cp_skipped = _execution_log_ids_since(plan, last_cp_ts)
+                cp_exec_summary = count_log_activity_since(plan, last_cp_ts)
+                append_progression_event(
+                    build_plan_checkpoint_event(
+                        state,
+                        plan,
+                        phase_before=phase_before,
+                        trigger="subjective_review_cleared",
+                        source_command="review",
+                        resolved_since_last=cp_resolved or None,
+                        skipped_since_last=cp_skipped or None,
+                        execution_summary=cp_exec_summary,
+                    )
+                )
+            except Exception:
+                _logger.warning("Failed to append plan_checkpoint progression event", exc_info=True)
+
+        # --- Progression: subjective_review_completed ---
+        if transition.subjective_review_marked:
+            try:
+                new_review_ids = sorted(import_result.new_ids) if import_result is not None else []
+                dim_notes, issue_sums, prov = _extract_review_payload_detail(import_payload)
+                append_progression_event(
+                    build_review_complete_event(
+                        state,
+                        plan,
+                        assessment_mode=assessment_mode,
+                        covered_count=len(sync_inputs.covered_ids),
+                        new_ids_count=len(new_review_ids),
+                        phase_before=phase_before,
+                        covered_dimensions=sorted(sync_inputs.assessment_keys),
+                        new_review_ids=new_review_ids,
+                        dimension_notes_summary=dim_notes,
+                        review_issue_summaries=issue_sums,
+                        import_file=import_file,
+                        provenance=prov or None,
+                    )
+                )
+            except Exception:
+                _logger.warning("Failed to append subjective_review_completed progression event", exc_info=True)
+
+        # --- Progression: entered_planning_mode ---
+        try:
+            maybe_append_entered_planning(
+                state,
+                plan,
+                source_command="review",
+                trigger_action="review_import",
+                issue_ids=None,
+                phase_before=phase_before,
+            )
+        except Exception:
+            _logger.warning("Failed to append entered_planning_mode progression event", exc_info=True)
+
         if import_result is not None:
             _print_review_import_sync(
                 state,
@@ -444,7 +549,10 @@ def sync_plan_after_import(
                 triage_injected=bool(result.triage and result.triage.injected),
                 outcome=outcome,
             )
+        _print_auto_resolved_workflow_message(plan, result)
         _print_workflow_injected_message(result.workflow_injected_ids)
+        if transition.transition_phase:
+            emit_transition_message(transition.transition_phase)
         return outcome
     except PLAN_LOAD_EXCEPTIONS as exc:
         message = f"skipped plan sync after review import ({exc})"

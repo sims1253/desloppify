@@ -19,10 +19,15 @@ from .io import (
     save_plan_state_transactional,
 )
 from desloppify.app.commands.plan.shared.patterns import resolve_ids_from_patterns
+from desloppify.base.config import target_strict_score_from_config
 from desloppify.base.exception_sets import CommandError
 from desloppify.base.output.terminal import colorize
 from desloppify.base.output.user_message import print_user_message
-from desloppify.engine._plan.refresh_lifecycle import clear_postflight_scan_completion
+from desloppify.app.commands.helpers.transition_messages import emit_transition_message
+from desloppify.engine._plan.refresh_lifecycle import (
+    invalidate_postflight_scan,
+)
+from desloppify.engine._plan.sync import reconcile_plan
 from desloppify.engine.plan_ops import (
     SKIP_KIND_LABELS,
     append_log_entry,
@@ -70,7 +75,9 @@ def _validate_skip_requirements(
         return False
     if skip_kind_requires_note(kind) and not note:
         print(
-            colorize("  --permanent requires --note to explain the decision.", "yellow"),
+            colorize(
+                "  --permanent requires --note to explain the decision.", "yellow"
+            ),
             file=sys.stderr,
         )
         return False
@@ -245,7 +252,18 @@ def cmd_plan_skip(args: argparse.Namespace) -> None:
         note=note,
         detail={"kind": kind, "reason": reason},
     )
-    clear_postflight_scan_completion(plan, issue_ids=issue_ids, state=state)
+    transition_phase: str | None = None
+    reconcile_state = state_data or state
+    if invalidate_postflight_scan(plan, issue_ids=issue_ids, state=reconcile_state):
+        result = reconcile_plan(
+            plan,
+            reconcile_state,
+            target_strict=target_strict_score_from_config(
+                reconcile_state.get("config")
+            ),
+        )
+        if result.lifecycle_phase_changed:
+            transition_phase = result.lifecycle_phase
     _save_skip_plan_state(
         plan=plan,
         plan_file=plan_file,
@@ -271,6 +289,8 @@ def cmd_plan_skip(args: argparse.Namespace) -> None:
         " plan --help` to see all available plan tools. Otherwise"
         " no need to reply, just keep going."
     )
+    if transition_phase:
+        emit_transition_message(transition_phase)
 
 
 def cmd_plan_unskip(args: argparse.Namespace) -> None:
@@ -285,7 +305,9 @@ def cmd_plan_unskip(args: argparse.Namespace) -> None:
     state_file = runtime.state_path
     plan_file = _plan_file_for_state(state_file)
     plan = load_plan(plan_file)
-    issue_ids = resolve_ids_from_patterns(state, patterns, plan=plan, status_filter="all")
+    issue_ids = resolve_ids_from_patterns(
+        state, patterns, plan=plan, status_filter="all"
+    )
     if not issue_ids:
         print(colorize("  No matching issues found.", "yellow"))
         return
@@ -304,13 +326,26 @@ def cmd_plan_unskip(args: argparse.Namespace) -> None:
         actor="user",
         detail={"need_reopen": need_reopen},
     )
-    clear_postflight_scan_completion(plan, issue_ids=unskipped_ids, state=state)
-
     reopened: list[str] = []
+    state_data: dict | None = None
     if need_reopen:
         state_data = state_mod.load_state(state_file)
         for fid in need_reopen:
             reopened.extend(state_mod.resolve_issues(state_data, fid, "open"))
+    reconcile_state = state_data or state
+    transition_phase: str | None = None
+    if invalidate_postflight_scan(plan, issue_ids=unskipped_ids, state=reconcile_state):
+        result = reconcile_plan(
+            plan,
+            reconcile_state,
+            target_strict=target_strict_score_from_config(
+                reconcile_state.get("config")
+            ),
+        )
+        if result.lifecycle_phase_changed:
+            transition_phase = result.lifecycle_phase
+
+    if state_data is not None:
         save_plan_state_transactional(
             plan=plan,
             plan_path=plan_file,
@@ -330,6 +365,8 @@ def cmd_plan_unskip(args: argparse.Namespace) -> None:
                 "yellow",
             )
         )
+    if transition_phase:
+        emit_transition_message(transition_phase)
 
 
 def cmd_plan_backlog(args: argparse.Namespace) -> None:
@@ -344,7 +381,9 @@ def cmd_plan_backlog(args: argparse.Namespace) -> None:
     state_file = runtime.state_path
     plan_file = _plan_file_for_state(state_file)
     plan = load_plan(plan_file)
-    issue_ids = resolve_ids_from_patterns(state, patterns, plan=plan, status_filter="all")
+    issue_ids = resolve_ids_from_patterns(
+        state, patterns, plan=plan, status_filter="all"
+    )
     if not issue_ids:
         print(colorize("  No matching issues found.", "yellow"))
         return
@@ -360,7 +399,8 @@ def cmd_plan_backlog(args: argparse.Namespace) -> None:
     state_data = state_mod.load_state(state_file)
     issues = state_data.get("work_items", {})
     reopen_ids = [
-        fid for fid in removed
+        fid
+        for fid in removed
         if issues.get(fid, {}).get("status") in _BACKLOG_REOPEN_STATUSES
     ]
 
@@ -374,7 +414,15 @@ def cmd_plan_backlog(args: argparse.Namespace) -> None:
         issue_ids=removed,
         actor="user",
     )
-    clear_postflight_scan_completion(plan, issue_ids=removed, state=state_data)
+    transition_phase: str | None = None
+    if invalidate_postflight_scan(plan, issue_ids=removed, state=state_data):
+        result = reconcile_plan(
+            plan,
+            state_data,
+            target_strict=target_strict_score_from_config(state_data.get("config")),
+        )
+        if result.lifecycle_phase_changed:
+            transition_phase = result.lifecycle_phase
 
     if reopen_ids:
         save_plan_state_transactional(
@@ -388,7 +436,14 @@ def cmd_plan_backlog(args: argparse.Namespace) -> None:
 
     print(colorize(f"  Moved {len(removed)} item(s) to backlog.", "green"))
     if reopen_ids:
-        print(colorize(f"  Reopened {len(reopen_ids)} deferred/triaged-out issue(s) in state.", "dim"))
+        print(
+            colorize(
+                f"  Reopened {len(reopen_ids)} deferred/triaged-out issue(s) in state.",
+                "dim",
+            )
+        )
+    if transition_phase:
+        emit_transition_message(transition_phase)
 
 
 __all__ = [

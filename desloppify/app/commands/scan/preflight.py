@@ -17,6 +17,12 @@ from desloppify.base.output.terminal import colorize
 from desloppify.app.commands.resolve.plan_load import warn_plan_load_degraded_once
 from desloppify.engine._work_queue.context import resolve_plan_load_status
 from desloppify.engine._plan.constants import WORKFLOW_RUN_SCAN_ID
+from desloppify.engine._plan.refresh_lifecycle import current_lifecycle_phase
+from desloppify.engine._plan.sync.pipeline import live_planned_queue_empty
+from desloppify.engine._state.progression import (
+    append_progression_event,
+    build_scan_preflight_event,
+)
 from desloppify.engine.planning.queue_policy import build_execution_queue
 from desloppify.engine._work_queue.core import QueueBuildOptions
 
@@ -35,6 +41,20 @@ def _only_run_scan_workflow_remaining(state: dict, plan: dict) -> bool:
     )
     items = result.get("items", [])
     return len(items) == 1 and items[0].get("id") == WORKFLOW_RUN_SCAN_ID
+
+
+def _log_preflight(plan: dict | None, result: str, reason: str, queue_count: int) -> None:
+    """Best-effort append of scan_preflight progression event."""
+    try:
+        phase = current_lifecycle_phase(plan) if isinstance(plan, dict) else None
+        append_progression_event(
+            build_scan_preflight_event(
+                plan, result=result, reason=reason,
+                queue_count=queue_count, phase_before=phase,
+            )
+        )
+    except Exception:
+        _logger.warning("Failed to append scan_preflight progression event", exc_info=True)
 
 
 def scan_queue_preflight(args: object) -> None:
@@ -59,6 +79,7 @@ def scan_queue_preflight(args: object) -> None:
                 "yellow",
             )
         )
+        _log_preflight(None, "bypassed", "force-rescan with attestation", 0)
         return
 
     # No plan = no gate (first scan, or user never uses plan). Use the same
@@ -95,6 +116,7 @@ def scan_queue_preflight(args: object) -> None:
         _logger.debug("scan preflight queue breakdown skipped", exc_info=True)
         return
     if mode is ScoreDisplayMode.LIVE:
+        _log_preflight(plan, "allowed", "queue clear", 0)
         return  # Queue fully clear or no active cycle — scan allowed
     if (
         mode is ScoreDisplayMode.PHASE_TRANSITION
@@ -102,9 +124,29 @@ def scan_queue_preflight(args: object) -> None:
         and breakdown.workflow == 1
         and _only_run_scan_workflow_remaining(state, plan)
     ):
+        _log_preflight(plan, "allowed", "only workflow::run-scan remaining", 1)
         return
+    # The breakdown may count items from queue_order that the snapshot
+    # correctly filters out (stale items, subjective items from before
+    # boundary-only sync).  If the snapshot shows no execution items,
+    # the user has nothing actionable — allow the scan.
+    if live_planned_queue_empty(plan):
+        _log_preflight(plan, "allowed", "live planned queue empty", 0)
+        return
+    # Even if live_planned_queue_empty is False (non-synthetic items in
+    # queue_order), those items may be stale (not in current state).
+    # If the snapshot agrees the queue is empty, allow the scan.
+    from desloppify.engine._work_queue.context import queue_context
+    try:
+        ctx = queue_context(state, plan=plan)
+        if len(ctx.snapshot.execution_items) == 0:
+            _log_preflight(plan, "allowed", "snapshot execution queue empty", 0)
+            return
+    except Exception:
+        pass  # Fall through to the normal gate
 
     remaining = breakdown.queue_total
+    _log_preflight(plan, "blocked", f"{remaining} item(s) remaining", remaining)
     # GATE — block both FROZEN (objective work) and PHASE_TRANSITION
     # (subjective/workflow items remain)
     raise CommandError(

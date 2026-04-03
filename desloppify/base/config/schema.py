@@ -10,7 +10,7 @@ from desloppify.base.text_utils import is_numeric
 
 MIN_TARGET_STRICT_SCORE = 0
 MAX_TARGET_STRICT_SCORE = 100
-DEFAULT_TARGET_STRICT_SCORE: float = 95.0
+DEFAULT_TARGET_STRICT_SCORE: float = 85.0
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,7 @@ class ConfigKey:
 
 CONFIG_SCHEMA: dict[str, ConfigKey] = {
     "target_strict_score": ConfigKey(
-        int, 95, "North-star strict score target used to prioritize guidance"
+        int, 85, "North-star strict score target used to prioritize guidance"
     ),
     "review_max_age_days": ConfigKey(
         int, 30, "Days before a file review is considered stale (0 = never)"
@@ -99,6 +99,24 @@ CONFIG_SCHEMA: dict[str, ConfigKey] = {
         bool,
         False,
         "Allow loading user plugins from .desloppify/plugins/ (security opt-in)",
+    ),
+    "transition_messages": ConfigKey(
+        dict,
+        {},
+        "Messages shown to agents at lifecycle phase transitions {phase: message}",
+    ),
+    "hermes_enabled": ConfigKey(
+        bool,
+        False,
+        "Enable Hermes agent integration (model switching, autoreply, task handoff)",
+    ),
+    "hermes_models": ConfigKey(
+        dict,
+        {
+            "execute": "openrouter:x-ai/grok-4.20-beta",
+            "review": "openrouter:google/gemini-3.1-pro-preview",
+        },
+        "Phase → provider:model mapping for Hermes model switching",
     ),
 }
 

@@ -43,7 +43,7 @@ def cmd_stage_observe(
             services=resolved_services,
             state=state,
             attestation=attestation,
-            start_message="  Planning mode auto-started (6 stages queued).",
+            start_message="  Planning mode auto-started (7 stages queued).",
             deps=TriageLifecycleDeps(
                 has_triage_in_queue=has_triage_in_queue_fn,
                 inject_triage_stages=inject_triage_stages_fn,
@@ -55,6 +55,11 @@ def cmd_stage_observe(
     meta = plan.setdefault("epic_triage_meta", {})
     stages = meta.setdefault("triage_stages", {})
     existing_stage = stages.get("observe")
+
+    if "strategize" not in stages:
+        print(colorize("  Cannot observe: strategize stage not complete.", "red"))
+        print(colorize('  Run: desloppify plan triage --stage strategize --report "{...}"', "dim"))
+        return
 
     report, is_reuse = resolve_reusable_report(report, existing_stage)
     if not report:
@@ -96,6 +101,7 @@ def cmd_stage_observe(
 
     from .evidence_parsing import (
         format_evidence_failures,
+        parse_cluster_verdicts,
         parse_observe_evidence,
         resolve_short_hash_to_full_id,
         validate_observe_evidence,
@@ -104,6 +110,7 @@ def cmd_stage_observe(
     valid_ids = set(review_issues.keys())
     cited = resolved_services.extract_issue_citations(report, valid_ids)
     evidence = parse_observe_evidence(report, valid_ids)
+    cluster_verdicts = parse_cluster_verdicts(report)
     evidence_failures = validate_observe_evidence(evidence, issue_count)
     blocking = [failure for failure in evidence_failures if failure.blocking]
     advisory = [failure for failure in evidence_failures if not failure.blocking]
@@ -143,6 +150,19 @@ def cmd_stage_observe(
                 "recommendation": entry.recommendation,
             }
     meta["issue_dispositions"] = dispositions
+
+    # Store cluster-level verdicts from auto-cluster sampling
+    if cluster_verdicts:
+        meta["cluster_verdicts"] = [
+            {
+                "cluster": v.cluster_name,
+                "verdict": v.verdict,
+                "sample_count": v.sample_count,
+                "false_positive_rate": v.false_positive_rate,
+                "recommendation": v.recommendation,
+            }
+            for v in cluster_verdicts
+        ]
 
     cleared = record_observe_stage(
         stages,

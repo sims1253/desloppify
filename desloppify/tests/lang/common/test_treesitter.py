@@ -646,7 +646,12 @@ class TestSpecValidation:
             _make_query,
         )
 
-        parser, language = _get_parser(spec.grammar)
+        try:
+            parser, language = _get_parser(spec.grammar)
+        except (LookupError, Exception) as exc:
+            if "not available" in str(exc) or "not found" in str(exc).lower():
+                pytest.skip(f"grammar {spec.grammar!r} not available in this environment")
+            raise
         # Verify function query compiles.
         if spec.function_query:
             q = _make_query(language, spec.function_query)
@@ -1161,6 +1166,68 @@ class Calculator {
         greet = next(f for f in functions if f.name == "greet")
         assert "console.log" not in greet.normalized
         assert "return" in greet.normalized
+
+
+# ── R extraction tests ─────────────────────────────────────────
+
+
+class TestRExtraction:
+    @pytest.fixture
+    def r_file(self, tmp_path):
+        code = """\
+# Named function assigned with <-
+my_func <- function(x, y) {
+    result <- x + y
+    return(result)
+}
+
+# Anonymous function inside lapply
+result <- lapply(items, function(i) {
+    value <- process(i)
+    transform(value)
+    return(value)
+})
+"""
+        f = tmp_path / "analysis.R"
+        f.write_text(code)
+        return str(f)
+
+    def test_named_function_extraction(self, r_file, tmp_path):
+        from desloppify.languages._framework.treesitter.analysis.extractors import (
+            ts_extract_functions,
+        )
+        from desloppify.languages._framework.treesitter.specs.scripting import R_SPEC
+
+        functions = ts_extract_functions(tmp_path, R_SPEC, [r_file])
+        names = [f.name for f in functions]
+        assert "my_func" in names
+
+    def test_anonymous_function_extraction(self, r_file, tmp_path):
+        from desloppify.languages._framework.treesitter.analysis.extractors import (
+            ts_extract_functions,
+        )
+        from desloppify.languages._framework.treesitter.specs.scripting import R_SPEC
+
+        functions = ts_extract_functions(tmp_path, R_SPEC, [r_file])
+        names = [f.name for f in functions]
+        assert "<anonymous>" in names, (
+            "Anonymous functions in lapply() should be extracted with "
+            "synthesized <anonymous> name"
+        )
+
+    def test_anonymous_function_has_correct_metadata(self, r_file, tmp_path):
+        from desloppify.languages._framework.treesitter.analysis.extractors import (
+            ts_extract_functions,
+        )
+        from desloppify.languages._framework.treesitter.specs.scripting import R_SPEC
+
+        functions = ts_extract_functions(tmp_path, R_SPEC, [r_file])
+        anon_fns = [f for f in functions if f.name == "<anonymous>"]
+        assert len(anon_fns) >= 1
+        fn = anon_fns[0]
+        assert fn.file == r_file
+        assert fn.line > 0
+        assert fn.body_hash is not None
 
 
 # ── ESLint parser tests ───────────────────────────────────────

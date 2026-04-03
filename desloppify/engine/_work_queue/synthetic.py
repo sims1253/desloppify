@@ -10,7 +10,7 @@ from typing import Any
 
 from desloppify.engine.plan_triage import TRIAGE_STAGE_SPECS
 from desloppify.engine._scoring.subjective.core import DISPLAY_NAMES
-from desloppify.engine._state.issue_semantics import is_triage_finding
+from desloppify.engine._state.issue_semantics import is_review_work_item, is_triage_finding
 from desloppify.engine._state.schema import StateModel
 from desloppify.engine._work_queue.helpers import (
     detail_dict,
@@ -31,11 +31,6 @@ from desloppify.engine._plan.constants import (
 )
 from desloppify.engine._plan.triage.snapshot import build_triage_snapshot
 from desloppify.engine._plan.refresh_lifecycle import (
-    LIFECYCLE_PHASE_REVIEW_INITIAL,
-    LIFECYCLE_PHASE_TRIAGE,
-    LIFECYCLE_PHASE_TRIAGE_POSTFLIGHT,
-    LIFECYCLE_PHASE_WORKFLOW,
-    LIFECYCLE_PHASE_WORKFLOW_POSTFLIGHT,
     current_lifecycle_phase,
     subjective_review_completed_for_scan,
 )
@@ -221,11 +216,13 @@ def build_subjective_items(
     }
 
     # Review issues are keyed by raw dimension name (snake_case).
+    # Only review-type issues contribute to subjective dimension counts,
+    # not mechanical defects (even those with a dimension field).
     review_open_by_dim: dict[str, int] = {}
     for issue in issues.values():
         if issue.get("status") != "open":
             continue
-        if is_triage_finding(issue):
+        if is_review_work_item(issue):
             dim_key = str(detail_dict(issue).get("dimension", "")).strip().lower()
             if dim_key:
                 review_open_by_dim[dim_key] = review_open_by_dim.get(dim_key, 0) + 1
@@ -259,10 +256,9 @@ def build_subjective_items(
     def _suppressed_same_cycle_refresh(dimension_key: str, *, stale: bool) -> bool:
         if not stale or latest_trusted_audit_ts == "":
             return False
-        if current_phase not in {
-            LIFECYCLE_PHASE_WORKFLOW, LIFECYCLE_PHASE_WORKFLOW_POSTFLIGHT,
-            LIFECYCLE_PHASE_TRIAGE, LIFECYCLE_PHASE_TRIAGE_POSTFLIGHT,
-        }:
+        # Persisted phase is now "plan" or "execute".  The suppression
+        # applies when in planning mode (covers workflow/triage display phases).
+        if current_phase != "plan":
             return False
         assessments = state.get("subjective_assessments", {}) or {}
         payload = assessments.get(dimension_key)
@@ -315,7 +311,6 @@ def build_subjective_items(
             or (
                 is_below_target
                 and postflight_scan_completed_this_scan
-                and current_phase != LIFECYCLE_PHASE_REVIEW_INITIAL
                 and not review_completed_this_scan
             )
         )

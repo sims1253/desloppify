@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+from desloppify.engine._plan.constants import (
+    WORKFLOW_COMMUNICATE_SCORE_ID,
+    WORKFLOW_CREATE_PLAN_ID,
+    WORKFLOW_DEFERRED_DISPOSITION_ID,
+    WORKFLOW_IMPORT_SCORES_ID,
+    WORKFLOW_RUN_SCAN_ID,
+)
 from desloppify.engine.plan_triage import (
     triage_manual_stage_command,
     triage_run_stages_command,
@@ -10,8 +17,28 @@ from desloppify.engine.plan_triage import (
 
 def step_text(step: str | dict) -> str:
     if isinstance(step, dict):
-        return step.get("title", str(step))
+        title = step.get("title", str(step))
+        effort = step.get("effort", "")
+        return f"{title}  [{effort}]" if effort else title
     return str(step)
+
+
+def step_full(step: str | dict, *, indent: str = "    ") -> list[str]:
+    """Return the full step rendering: title + effort + detail + refs."""
+    import textwrap
+
+    if isinstance(step, str):
+        return [f"{indent}{step}"]
+    lines: list[str] = [f"{indent}{step_text(step)}"]
+    detail = step.get("detail", "")
+    if detail:
+        for line in textwrap.wrap(detail, width=90):
+            lines.append(f"{indent}  {line}")
+    refs = step.get("issue_refs", [])
+    if refs:
+        short_refs = [r.rsplit("::", 1)[-1] for r in refs]
+        lines.append(f"{indent}  Refs: {', '.join(short_refs)}")
+    return lines
 
 
 def _detail_mapping(item: dict) -> dict:
@@ -79,6 +106,17 @@ def _print_runner_commands(detail: dict, *, colorize_fn) -> None:
         print(colorize_fn(f"  Manual fallback: {manual_fallback}", "dim"))
 
 
+def _workflow_action_label(item_id: str) -> str:
+    labels = {
+        WORKFLOW_RUN_SCAN_ID: "Ready to scan",
+        WORKFLOW_DEFERRED_DISPOSITION_ID: "Deferred items",
+        WORKFLOW_CREATE_PLAN_ID: "Create execution plan",
+        WORKFLOW_COMMUNICATE_SCORE_ID: "Score update",
+        WORKFLOW_IMPORT_SCORES_ID: "Import review scores",
+    }
+    return labels.get(item_id, "Planning step")
+
+
 def render_workflow_stage(item: dict, *, colorize_fn, workflow_stage_name_fn) -> None:
     """Render a triage workflow stage item."""
     blocked = item.get("is_blocked", False)
@@ -86,7 +124,7 @@ def render_workflow_stage(item: dict, *, colorize_fn, workflow_stage_name_fn) ->
     stage = workflow_stage_name_fn(item)
     tag = " [blocked]" if blocked else ""
     style = "dim" if blocked else "bold"
-    print(colorize_fn(f"  (Planning stage: {stage}{tag})", style))
+    print(colorize_fn(f"  (Planning: {stage}{tag})", style))
     print(colorize_fn("  " + "─" * 60, "dim"))
     print(f"  {colorize_fn(item.get('summary', ''), 'yellow')}")
     total = detail.get("total_review_issues", 0)
@@ -103,7 +141,8 @@ def render_workflow_stage(item: dict, *, colorize_fn, workflow_stage_name_fn) ->
 
 
 def render_workflow_action(item: dict, *, colorize_fn) -> None:
-    print(colorize_fn("  (Workflow step)", "bold"))
+    label = _workflow_action_label(str(item.get("id", "")))
+    print(colorize_fn(f"  ({label})", "bold"))
     print(colorize_fn("  " + "─" * 60, "dim"))
     print(f"  {colorize_fn(item.get('summary', ''), 'yellow')}")
     detail = _detail_mapping(item)
@@ -120,4 +159,4 @@ def render_workflow_action(item: dict, *, colorize_fn) -> None:
     print(colorize_fn(f"\n  Action: {item.get('primary_command', '')}", "cyan"))
 
 
-__all__ = ["render_workflow_action", "render_workflow_stage", "step_text"]
+__all__ = ["render_workflow_action", "render_workflow_stage", "step_full", "step_text"]

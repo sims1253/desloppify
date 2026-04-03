@@ -418,13 +418,13 @@ class TestCurrentUnderTargetIds:
         result = current_under_target_ids(state_low, target_strict=95.0)
         assert result == {"subjective::dim_low"}
 
-    def test_default_target_is_95(self):
-        """Uses DEFAULT_TARGET_STRICT_SCORE (95.0) when not specified."""
-        state = _scored_state("design_coherence", score=94.0)
+    def test_default_target_is_85(self):
+        """Uses DEFAULT_TARGET_STRICT_SCORE (85.0) when not specified."""
+        state = _scored_state("design_coherence", score=84.0)
         result = current_under_target_ids(state)
         assert "subjective::design_coherence" in result
 
-        state_high = _scored_state("design_coherence", score=95.0)
+        state_high = _scored_state("design_coherence", score=85.0)
         result_high = current_under_target_ids(state_high)
         assert result_high == set()
 
@@ -512,11 +512,26 @@ class TestIsTriageStale:
         }
         assert is_triage_stale(plan, state) is False
 
-    def test_non_review_issues_ignored(self):
+    def test_mechanical_issues_trigger_staleness_on_first_triage(self):
+        """Mechanical issues trigger staleness when no prior triage exists."""
         plan = {"epic_triage_meta": {"triaged_ids": []}}
         state = {
             "issues": {
                 "u1": {"status": "open", "detector": "unused"},
+            }
+        }
+        assert is_triage_stale(plan, state) is True
+
+    def test_mechanical_within_threshold_not_stale(self):
+        """Mechanical count growth within threshold does not trigger staleness."""
+        plan = {"epic_triage_meta": {
+            "triaged_ids": ["r1"],
+            "last_mechanical_count": 100,
+        }}
+        state = {
+            "issues": {
+                "r1": {"status": "open", "detector": "review"},
+                **{f"u{i}": {"status": "open", "detector": "unused"} for i in range(105)},
             }
         }
         assert is_triage_stale(plan, state) is False
