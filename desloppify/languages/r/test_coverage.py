@@ -33,8 +33,17 @@ ASSERT_PATTERNS = [
         r"\bverify_output\s*\(",
     ]
 ]
-MOCK_PATTERNS: list[re.Pattern[str]] = []
-SNAPSHOT_PATTERNS: list[re.Pattern[str]] = []
+MOCK_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"\blocal_mocked_bindings\s*\("),
+    re.compile(r"\bwith_mocked_bindings\s*\("),
+    re.compile(r"\bwith_mock\s*\("),
+]
+SNAPSHOT_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"\bexpect_snapshot_value\s*\("),
+    re.compile(r"\bexpect_snapshot_file\s*\("),
+    re.compile(r"\bexpect_snapshot\s*\("),
+    re.compile(r"\bsnapshot_review\s*\("),
+]
 TEST_FUNCTION_RE = re.compile(r"(?m)^\s*test_that\s*\(")
 BARREL_BASENAMES: set[str] = set()
 

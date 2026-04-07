@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from desloppify.languages.r.test_coverage import (
     ASSERT_PATTERNS,
+    MOCK_PATTERNS,
+    SNAPSHOT_PATTERNS,
     has_testable_logic,
     map_test_to_source,
     parse_test_import_specs,
@@ -113,3 +115,49 @@ class TestAssertPatterns:
             if pat.search("expect_error(readLines('bad'))"):
                 return
         assert False, "No pattern matched expect_error"
+
+
+class TestMockPatterns:
+    def test_matches_local_mocked_bindings(self):
+        assert any(
+            pat.search("local_mocked_bindings(foo = bar)")
+            for pat in MOCK_PATTERNS
+        )
+
+    def test_matches_with_mocked_bindings(self):
+        assert any(
+            pat.search("with_mocked_bindings(foo = bar, { })")
+            for pat in MOCK_PATTERNS
+        )
+
+    def test_no_match_on_plain_function(self):
+        assert not any(
+            pat.search("my_function(x = 1)")
+            for pat in MOCK_PATTERNS
+        )
+
+
+class TestSnapshotPatterns:
+    def test_matches_expect_snapshot(self):
+        assert any(
+            pat.search("expect_snapshot(result)")
+            for pat in SNAPSHOT_PATTERNS
+        )
+
+    def test_matches_expect_snapshot_value(self):
+        assert any(
+            pat.search("expect_snapshot_value(x)")
+            for pat in SNAPSHOT_PATTERNS
+        )
+
+    def test_matches_expect_snapshot_file(self):
+        assert any(
+            pat.search("expect_snapshot_file('output.md')")
+            for pat in SNAPSHOT_PATTERNS
+        )
+
+    def test_no_match_on_plain_function(self):
+        assert not any(
+            pat.search("expect_equal(x, 1)")
+            for pat in SNAPSHOT_PATTERNS
+        )
