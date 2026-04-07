@@ -742,17 +742,62 @@ def _looks_like_function_definition_token(content: str, offset: int) -> bool:
 def _holds_lock_guard_across_await(body: str, acquire_re: re.Pattern[str]) -> bool:
     for match in acquire_re.finditer(body):
         guard = match.groupdict().get("guard", "")
-        tail = body[match.end() :]
+        acquire_offset = match.end()
+
+        # Determine the brace depth at the acquisition point so we can detect
+        # implicit drops when the enclosing block scope ends.
+        acquire_depth = _brace_depth_at(body, acquire_offset)
+
+        tail = body[acquire_offset:]
         await_match = _AWAIT_RE.search(tail)
         if await_match is None:
             continue
+
         before_await = tail[: await_match.start()]
+
+        # Explicit drop() call before the await → guard is released.
         if guard and re.search(
             rf"\b(?:drop|std::mem::drop)\s*\(\s*{re.escape(guard)}\s*\)",
             before_await,
         ):
             continue
+
+        # Implicit drop via block scope: if the brace depth drops below
+        # the acquisition depth before the await, the guard has been
+        # dropped by the closing brace of its enclosing block.
+        if _scope_exits_before(before_await, acquire_depth):
+            continue
+
         return True
+    return False
+
+
+def _brace_depth_at(text: str, offset: int) -> int:
+    """Return the net brace depth at *offset* within *text*."""
+    depth = 0
+    for i in range(offset):
+        ch = text[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+    return depth
+
+
+def _scope_exits_before(text: str, acquire_depth: int) -> bool:
+    """Return True if brace depth drops below *acquire_depth* anywhere in *text*.
+
+    This means the block that contained the lock acquisition has ended,
+    implicitly dropping the guard.
+    """
+    depth = acquire_depth
+    for ch in text:
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth < acquire_depth:
+                return True
     return False
 
 

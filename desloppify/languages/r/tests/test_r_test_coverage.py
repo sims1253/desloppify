@@ -50,7 +50,7 @@ class TestMapTestToSource:
 
 class TestStripTestMarkers:
     def test_strips_test_prefix(self):
-        assert strip_test_markers("test-transform.R") == "R/transform.R"
+        assert strip_test_markers("test-transform.R") == "transform.R"
 
     def test_returns_none_for_non_test_file(self):
         assert strip_test_markers("transform.R") is None

@@ -186,6 +186,7 @@ def _run_stage_sequence(
                 timeout_seconds=pipeline_context.timeout_seconds,
                 dry_run=pipeline_context.dry_run,
                 append_run_log=pipeline_context.append_run_log,
+                state=pipeline_context.state,
             ),
             handlers=_STAGE_HANDLERS,
             dependencies=_stage_execution_dependencies(),

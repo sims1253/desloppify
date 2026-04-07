@@ -124,9 +124,9 @@ def map_test_to_source(test_path: str, production_set: set[str]) -> str | None:
 def strip_test_markers(basename: str) -> str | None:
     """Strip R testthat naming marker to derive source basename."""
     if basename.startswith("test-") and basename.endswith(".R"):
-        return f"R/{basename[5:]}"
+        return basename[5:]
     if basename.startswith("test-") and basename.endswith(".r"):
-        return f"R/{basename[5:-2]}.R"
+        return f"{basename[5:-2]}.R"
     return None
 
 

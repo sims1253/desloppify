@@ -48,6 +48,7 @@ from desloppify.app.commands.runner.codex_batch import (
     run_codex_batch,
     run_followup_scan,
 )
+from ..runner_opencode import run_opencode_batch
 from ..runtime.setup import setup_lang_concrete as _setup_lang
 from ..runtime_paths import (
     blind_packet_path as _blind_packet_path,
@@ -105,7 +106,7 @@ def _batch_live_log_interval_seconds(heartbeat_seconds: float) -> float:
     return max(1.0, min(heartbeat_seconds, 10.0))
 
 
-def _build_batch_run_deps(*, policy, project_root: Path) -> review_batches_mod.BatchRunDeps:
+def _build_batch_run_deps(*, args, policy, project_root: Path) -> review_batches_mod.BatchRunDeps:
     """Build the dependency bundle used by prepare/execute/import phases."""
     from desloppify.engine.plan_state import load_policy_result, render_policy_block
 
@@ -160,8 +161,8 @@ def _build_batch_run_deps(*, policy, project_root: Path) -> review_batches_mod.B
             safe_write_text_fn=safe_write_text,
             colorize_fn=colorize,
         ),
-        run_codex_batch_fn=partial(
-            run_codex_batch,
+        run_batch_fn=partial(
+            run_opencode_batch if getattr(args, "runner", "codex") == "opencode" else run_codex_batch,
             deps=codex_batch_deps,
         ),
         execute_batches_fn=lambda **kwargs: execute_batches(
@@ -384,6 +385,7 @@ def do_run_batches(args, state, lang, state_file, config: dict | None = None) ->
     subagent_runs_dir = _subagent_runs_dir()
     policy = resolve_batch_run_policy(args)
     batch_deps = _build_batch_run_deps(
+        args=args,
         policy=policy,
         project_root=project_root,
     )
@@ -486,18 +488,24 @@ def do_import_run(
                 f"Results directory does not exist: {results_dir}\n"
                 "  Did you run --run-batches or launch subagents to produce results first?"
             )
+            raise CommandError(hint, exit_code=1)
         elif len(missing) == len(selected):
             hint = (
                 f"No result files found in {results_dir}\n"
                 "  Each subagent must write its output to results/batch-N.raw.txt.\n"
                 "  Run --run-batches first, or launch subagents on the prompts/ files manually."
             )
+            raise CommandError(hint, exit_code=1)
+        elif allow_partial:
+            missing_set = {idx - 1 for idx in missing}
+            selected_indexes = [idx for idx in selected_indexes if idx not in missing_set]
+            output_files = {idx: output_files[idx] for idx in selected_indexes}
         else:
             hint = (
                 f"Missing result files in {results_dir}: batches {missing}\n"
                 "  Re-run the failed batches or use --allow-partial to import what succeeded."
             )
-        raise CommandError(hint, exit_code=1)
+            raise CommandError(hint, exit_code=1)
 
     batch_results, failures = collect_batch_results(
         request=review_batches_mod.CollectBatchResultsRequest(

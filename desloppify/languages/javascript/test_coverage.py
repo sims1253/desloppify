@@ -1,4 +1,4 @@
-"""TypeScript-specific test coverage heuristics and mappings."""
+"""JavaScript-specific test coverage heuristics and mappings."""
 
 from __future__ import annotations
 
@@ -11,11 +11,12 @@ from desloppify.base.output.fallbacks import log_best_effort_failure
 from desloppify.base.discovery.paths import get_project_root, get_src_path
 from desloppify.base.text_utils import strip_c_style_comments
 
-TS_IMPORT_RE = re.compile(
+# ESM import syntax is shared with TypeScript.
+JS_IMPORT_RE = re.compile(
     r"""(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)(?:type\s+)?['\"]([^'\"]+)['\"]""",
     re.MULTILINE,
 )
-TS_REEXPORT_RE = re.compile(
+JS_REEXPORT_RE = re.compile(
     r"""^export\s+(?:\{[^}]*\}|\*)\s+from\s+['\"]([^'\"]+)['\"]""", re.MULTILINE
 )
 
@@ -65,8 +66,8 @@ EXPECT_COMPARISON_RE = re.compile(
 )
 EXPECT_TO_BE_DEFINED_RE = re.compile(r"""\.toBeDefined\s*\(""")
 
-BARREL_BASENAMES = {"index.ts", "index.tsx"}
-_TS_EXTENSIONS = ["", ".ts", ".tsx", "/index.ts", "/index.tsx"]
+BARREL_BASENAMES = {"index.js", "index.jsx", "index.mjs", "index.cjs"}
+_JS_EXTENSIONS = ["", ".js", ".jsx", ".mjs", ".cjs", "/index.js", "/index.jsx", "/index.mjs", "/index.cjs"]
 logger = logging.getLogger(__name__)
 
 
@@ -79,12 +80,9 @@ def _relative_if_under_root(path_str: str) -> str:
 
 
 def has_testable_logic(filepath: str, content: str) -> bool:
-    """Return True if a TypeScript file has runtime logic worth testing."""
-    if filepath.endswith(".d.ts"):
-        return False
-
+    """Return True if a JavaScript file has runtime logic worth testing."""
     in_block_comment = False
-    brace_context = False  # True when inside type/interface/import/export braces
+    brace_context = False
     brace_depth = 0
 
     for line in content.splitlines():
@@ -109,42 +107,18 @@ def has_testable_logic(filepath: str, content: str) -> bool:
                 brace_depth = 0
             continue
 
-        if re.match(r"(?:export\s+)?(?:type|interface)\s+\w+", stripped):
-            opens = stripped.count("{")
-            closes = stripped.count("}")
-            if opens > closes:
-                brace_context = True
-                brace_depth = opens - closes
-            continue
-
         if re.match(r"import\s+", stripped):
             if "{" in stripped and "}" not in stripped:
                 brace_context = True
                 brace_depth = stripped.count("{") - stripped.count("}")
             continue
 
-        if re.match(r"export\s+(?:type\s+)?\{", stripped):
+        if re.match(r"export\s+\{", stripped):
             if "}" not in stripped:
                 brace_context = True
                 brace_depth = stripped.count("{") - stripped.count("}")
             continue
         if re.match(r"export\s+\*\s*(?:as\s+\w+\s+)?from\s+", stripped):
-            continue
-
-        if re.match(r"export\s+default\s+(?:type|interface)\s+", stripped):
-            opens = stripped.count("{")
-            closes = stripped.count("}")
-            if opens > closes:
-                brace_context = True
-                brace_depth = opens - closes
-            continue
-
-        if re.match(r"declare\s+", stripped):
-            opens = stripped.count("{")
-            closes = stripped.count("}")
-            if opens > closes:
-                brace_context = True
-                brace_depth = opens - closes
             continue
 
         if re.match(r"^[}\])\s;,]*$", stripped):
@@ -158,7 +132,7 @@ def has_testable_logic(filepath: str, content: str) -> bool:
 def resolve_import_spec(
     spec: str, test_path: str, production_files: set[str]
 ) -> str | None:
-    """Resolve a TypeScript import specifier to a production file path."""
+    """Resolve a JavaScript import specifier to a production file path."""
     if spec.startswith("@/") or spec.startswith("~/"):
         base = get_src_path() / spec[2:]
     elif spec.startswith("."):
@@ -167,7 +141,7 @@ def resolve_import_spec(
     else:
         return None
 
-    for ext in _TS_EXTENSIONS:
+    for ext in _JS_EXTENSIONS:
         candidate = str(Path(str(base) + ext))
         if candidate in production_files:
             return candidate
@@ -184,19 +158,19 @@ def resolve_import_spec(
         except OSError as exc:
             log_best_effort_failure(
                 logger,
-                f"resolve TypeScript import specifier {spec} from {test_path}",
+                f"resolve JavaScript import specifier {spec} from {test_path}",
                 exc,
             )
     return None
 
 
 def parse_test_import_specs(content: str) -> list[str]:
-    """Extract import specs from TypeScript test content."""
-    return [m.group(1) for m in TS_IMPORT_RE.finditer(content) if m.group(1)]
+    """Extract import specs from JavaScript test content."""
+    return [m.group(1) for m in JS_IMPORT_RE.finditer(content) if m.group(1)]
 
 
 def resolve_barrel_reexports(filepath: str, production_files: set[str]) -> set[str]:
-    """Resolve one-hop TypeScript barrel re-exports to concrete production files."""
+    """Resolve one-hop JavaScript barrel re-exports to concrete production files."""
     try:
         content = Path(filepath).read_text()
     except (OSError, UnicodeDecodeError) as exc:
@@ -204,7 +178,7 @@ def resolve_barrel_reexports(filepath: str, production_files: set[str]) -> set[s
         return set()
 
     results = set()
-    for match in TS_REEXPORT_RE.finditer(content):
+    for match in JS_REEXPORT_RE.finditer(content):
         spec = match.group(1)
         resolved = resolve_import_spec(spec, filepath, production_files)
         if resolved:
@@ -212,43 +186,59 @@ def resolve_barrel_reexports(filepath: str, production_files: set[str]) -> set[s
     return results
 
 
-_TS_SOURCE_EXTENSIONS = (".ts", ".tsx", ".js", ".jsx")
-
-
-def _cross_extension_candidates(src_basename: str) -> list[str]:
-    """Yield the basename with each TS/JS extension swapped in."""
-    stem, ext = os.path.splitext(src_basename)
-    if ext not in _TS_SOURCE_EXTENSIONS:
-        return [src_basename]
-    return [stem + alt for alt in _TS_SOURCE_EXTENSIONS]
-
-
 def map_test_to_source(test_path: str, production_set: set[str]) -> str | None:
-    """Map a TypeScript test file path to a production file by naming convention."""
+    """Map a JavaScript test file path to a production file by naming convention.
+
+    Handles nested ``__tests__`` directories such as
+    ``src/__tests__/unit/utils/foo.test.mjs`` -> ``src/utils/foo.mjs``.
+    """
     basename = os.path.basename(test_path)
     dirname = os.path.dirname(test_path)
     parent = os.path.dirname(dirname)
 
     candidates: list[str] = []
 
+    # Strip .test. / .spec. markers to derive the source basename.
     for pattern in (".test.", ".spec."):
         if pattern in basename:
             src = basename.replace(pattern, ".")
-            for alt in _cross_extension_candidates(src):
-                candidates.append(os.path.join(dirname, alt))
-                if parent:
-                    candidates.append(os.path.join(parent, alt))
+            candidates.append(os.path.join(dirname, src))
+            if parent:
+                candidates.append(os.path.join(parent, src))
+
+    # Walk up through __tests__ and any intermediate dirs (unit/, integration/).
+    # e.g. src/__tests__/unit/utils/foo.test.mjs -> src/utils/foo.mjs
+    parts = Path(test_path).parts
+    if "__tests__" in parts:
+        tests_idx = parts.index("__tests__")
+        prefix = os.path.join(*parts[:tests_idx]) if tests_idx > 0 else ""
+        # Subdirectories after __tests__ that are category names, not source mirrors.
+        _CATEGORY_DIRS = {"unit", "integration", "e2e", "functional", "smoke"}
+        suffix_parts = list(parts[tests_idx + 1 :])
+        # Strip leading category dirs.
+        while suffix_parts and suffix_parts[0] in _CATEGORY_DIRS:
+            suffix_parts.pop(0)
+        if suffix_parts:
+            src_basename = suffix_parts[-1]
+            for p in (".test.", ".spec."):
+                if p in src_basename:
+                    src_basename = src_basename.replace(p, ".")
+            suffix_parts[-1] = src_basename
+            candidate = os.path.join(prefix, *suffix_parts) if prefix else os.path.join(*suffix_parts)
+            candidates.append(candidate)
 
     dir_basename = os.path.basename(dirname)
     if dir_basename == "__tests__" and parent:
         candidates.append(os.path.join(parent, basename))
 
+    # First pass: match by basename against all production files.
     for prod in production_set:
         prod_base = os.path.basename(prod)
         for c in candidates:
             if os.path.basename(c) == prod_base and prod in production_set:
                 return prod
 
+    # Second pass: exact path match.
     for c in candidates:
         if c in production_set:
             return c
@@ -257,12 +247,7 @@ def map_test_to_source(test_path: str, production_set: set[str]) -> str | None:
 
 
 def strip_test_markers(basename: str) -> str | None:
-    """Strip TypeScript test naming markers to derive a source basename.
-
-    Returns the direct replacement (e.g. ``Foo.test.ts`` → ``Foo.ts``).
-    Cross-extension matching (``Foo.test.ts`` → ``Foo.tsx``) is handled by
-    ``map_test_to_source`` which tries all TS/JS extensions.
-    """
+    """Strip JavaScript test naming markers to derive a source basename."""
     for marker in (".test.", ".spec."):
         if marker in basename:
             return basename.replace(marker, ".")
