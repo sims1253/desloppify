@@ -1,4 +1,4 @@
-"""Regression tests for R tooling integration (air, lintr, goodpractice, covr, R CMD check).
+"""Regression tests for R air formatter integration and plugin registration.
 
 Ensures:
 1. The air format --check parser handles reformat output.
